@@ -1,0 +1,21 @@
+{
+	"name": "googleplaymusic",
+	"version": "1.0.0",
+	"description": "A google play music plugin for Volumio.",
+	"main": "index.js",
+	"scripts": {
+		"test": "echo \"Error: no test specified\" && exit 1"
+	},
+	"author": "Vikash",
+	"license": "ISC",
+	"volumio_info": {
+		"prettyName": "googlePlayMusic",
+		"icon": "fa-lightbulb-o",
+		"plugin_type": "music_service"
+	},
+	"dependencies": {
+		"fs-extra": "^0.28.0",
+		"kew": "^0.7.0",
+		"v-conf": "^1.4.0"
+	}
+}
