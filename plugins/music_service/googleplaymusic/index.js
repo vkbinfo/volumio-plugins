@@ -140,7 +140,6 @@ googleplaymusic.prototype.setConf = function(varName, varValue) {
 googleplaymusic.prototype.addToBrowseSources = function () {
 
 	// Use this function to add your music service plugin to music sources
-		//var data = {name: 'Spotify', uri: 'spotify',plugin_type:'music_service',plugin_name:'spop'};
 		var data = {name: 'Googel Play Music',  uri: 'googleplaymusic',plugin_type:'music_service',plugin_name:'googleplaymusic'};
     this.commandRouter.volumioAddToBrowseSources(data);
 };
@@ -149,13 +148,91 @@ googleplaymusic.prototype.handleBrowseUri = function (curUri) {
     var self = this;
 
     //self.commandRouter.logger.info(curUri);
-    var response;
-
-
-    return response;
-};
-
-
+		var response;
+		if (curUri == 'googleplaymusic') {
+			response = libQ.resolve({
+				navigation: {
+					lists: [
+						{
+							"availableListViews": [
+								"list"
+							],
+							"items": [
+								{
+									service: 'spop',
+									type: 'googleplaymusic-category',
+									title: 'My Playlists',
+									artist: '',
+									album: '',
+									icon: 'fa fa-folder-open-o',
+									uri: 'googleplaymusic/playlists'
+								},
+								{
+									service: 'spop',
+									type: 'googleplaymusic-category',
+									title: 'Featured Playlists',
+									artist: '',
+									album: '',
+									icon: 'fa fa-folder-open-o',
+									uri: 'googleplaymusic/featuredplaylists'
+								},
+								{
+									service: 'spop',
+									type: 'googleplaymusic-category',
+									title: 'What\'s New',
+									artist: '',
+									album: '',
+									icon: 'fa fa-folder-open-o',
+									uri: 'googleplaymusic/new'
+								},
+								{
+									service: 'spop',
+									type: 'googleplaymusic-category',
+									title: 'Genres & Moods',
+									artist: '',
+									album: '',
+									icon: 'fa fa-folder-open-o',
+									uri: 'googleplaymusic/categories'
+								}
+							]
+						}
+					],
+					"prev": {
+						uri: 'googleplaymusic'
+					}
+				}
+			});
+		}
+		else if (curUri.startsWith('googleplaymusic/playlists')) {
+			if (curUri == 'googleplaymusic/playlists')
+				response = self.listPlaylists();
+			else {
+				response = self.listPlaylist(curUri);
+			}
+		}
+		else if (curUri.startsWith('googleplaymusic/featuredplaylists')) {
+			response = self.featuredPlaylists(curUri);
+		}
+		else if (curUri.startsWith('googleplaymusic:user:')) {
+			response = self.listWebPlaylist(curUri);
+		}
+		else if (curUri.startsWith('googleplaymusic/new')) {
+			response = self.listWebNew(curUri);
+		}
+		else if (curUri.startsWith('googleplaymusic/categories')) {
+			response = self.listWebCategories(curUri);
+		}
+		else if (curUri.startsWith('googleplaymusic:album')) {
+			response = self.listWebAlbum(curUri);
+		}
+		else if (curUri.startsWith('googleplaymusic/category')) {
+			response = self.listWebCategory(curUri);
+		}
+		else if (curUri.startsWith('googleplaymusic:artist:')) {
+			response = self.listWebArtist(curUri);
+		}
+		return response;
+	}
 
 // Define a method to clear, add, and play an array of tracks
 googleplaymusic.prototype.clearAddPlayTrack = function(track) {
