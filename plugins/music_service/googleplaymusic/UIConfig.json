@@ -1,7 +1,47 @@
 {
   "page": {
-    "label": "TRANSLATE.PLUGIN_CONFIGURATION"
+    "label": "Google Play Music"
   },
   "sections": [
+   {
+      "id": "section_account",
+      "label": "Google Play Music",
+      "element": "section",
+      "onSave": {"type":"controller", "endpoint":"music_service/googleplaymusic", "method":"saveGoogleAccount"},
+      "saveButton": {
+        "label": "TRANSLATE.SAVE",
+        "data": [
+          "email",
+          "password",
+          "bitrate"
+        ]
+      },
+      "content": [
+        {
+          "id": "email",
+          "type":"text",
+          "element": "input",
+          "doc": "This is the email id of your Google account",
+          "label": "Email",
+          "value": ""
+        },
+        {
+          "id": "password",
+          "type":"password",
+          "element": "input",
+          "doc": "This is the password of your Google account",
+          "label": "Password",
+          "value": ""
+        },
+        {
+          "id":"bitrate",
+          "element": "switch",
+          "doc": "High bitrate",
+          "label": "High Bitrate",
+          "value": true
+        }
+      ]
+   }
   ]
 }
+
