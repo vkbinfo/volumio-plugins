@@ -6,7 +6,6 @@ var config = new (require('v-conf'))();
 var exec = require('child_process').exec;
 var execSync = require('child_process').execSync;
 var PLAY_MUSIC = require('playmusic');
-var playMusic = new PLAY_MUSIC();
 
 
 module.exports = googleplaymusic;
@@ -17,6 +16,7 @@ function googleplaymusic(context) {
 	this.commandRouter = this.context.coreCommand;
 	this.logger = this.context.logger;
 	this.configManager = this.context.configManager;
+	this.playMusic = new PLAY_MUSIC();
 
 }
 
@@ -63,29 +63,50 @@ googleplaymusic.prototype.saveGoogleAccount = function(data) {
 	var self = this;
 	var defer = libQ.defer();
 	let email =  data['email'];
-let password = data['password'];
+	let password = data['password'];
+	let bitrate = data['bitrate'];
+	console.log('email', email);
+	console.log('password', password)
+	self.config.set('email', email);
+	self.config.set('password', password);
+	self.config.set('bitrate', bitrate);
 console.log('email', email);
 console.log('password', password);
 console.log('Google logging in...');
-playMusic.init({email: email, password: password}, function(err, response) {
-	if(err) console.error(err);
+self.playMusic.init({email: email, password: password}, function(err, response) {
+	if(err) {
+		console.error(err);
+		defer.reject({})
+		return defer.promise;
+	}
+	self.config.set('email', email);
+	self.config.set('password', password);
+	self.config.set('bitrate', bitrate);
+	self.config.set('token', self.playMusic._token);
+	console.log('returned token', self.playMusic._token);
 	// place code here
 		// // place code here
 		// console.log('Google play Music', playMusic.getPlayListEntries(function (err, playlists){
 		// 	if(err) console.log('error in getting playlist', err);
 		// 	console.log('Playlists', JSON.stringify(playlists, undefined, 2) );
 		// }));
-		playMusic.getAllTracks(function(err, library) {
-			var song = library.data.items.pop();
-			console.log(song);
-			playMusic.getStreamUrl(song.id, function(err, streamUrl) {
-					console.log('streamurl',streamUrl);
-					defer.resolve({});
-			});
-	});
+	// 	this.playMusic.getAllTracks(function(err, library) {
+	// 		var song = library.data.items.pop();
+	// 		console.log(song);
+	// 		playMusic.getStreamUrl(song.id, function(err, streamUrl) {
+	// 				console.log('streamurl', streamUrl);
+	// 				defer.resolve({});
+	// 		});
+	// });
 })
 	return defer.promise;
 }
+
+
+googleplaymusic.prototype.getPlaylists = function() {
+
+}
+
 
 // Configuration Methods -----------------------------------------------------------------------------
 
