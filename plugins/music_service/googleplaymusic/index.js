@@ -35,8 +35,9 @@ googleplaymusic.prototype.onVolumioStart = function()
 googleplaymusic.prototype.onStart = function() {
     var self = this;
 	var defer=libQ.defer();
-
-
+	// let googleAuthTokenData = self.config.get('authTokenData');
+	// console.log('google auth token data', googleAuthTokenData);
+	// self.playMusic.login(googleAuthTokenData);
 	// Once the Plugin has successfull started resolve the promise
 	self.addToBrowseSources();
 	defer.resolve();
@@ -73,17 +74,19 @@ googleplaymusic.prototype.saveGoogleAccount = function(data) {
 console.log('email', email);
 console.log('password', password);
 console.log('Google logging in...');
-self.playMusic.init({email: email, password: password}, function(err, response) {
+
+self.playMusic.login({email: email, password: password}, function(err, authTokenData) {
 	if(err) {
-		console.error(err);
+		console.error('Google login failed', err);
 		defer.reject({})
 		return defer.promise;
 	}
+	self.commandRouter.pushToastMessage('success', "Configuration update", 'You have successfully signed in the google account.');
 	self.config.set('email', email);
-	self.config.set('password', password);
 	self.config.set('bitrate', bitrate);
-	self.config.set('token', self.playMusic._token);
-	console.log('returned token', self.playMusic._token);
+	self.config.set('masterToken', authTokenData.masterToken);
+	self.config.set('androidId', authTokenData.androidId);
+	console.log('returned token', authTokenData);
 	// place code here
 		// // place code here
 		// console.log('Google play Music', playMusic.getPlayListEntries(function (err, playlists){
@@ -104,7 +107,18 @@ self.playMusic.init({email: email, password: password}, function(err, response) 
 
 
 googleplaymusic.prototype.getPlaylists = function() {
-
+	var defer = libQ.defer();
+    var self = this;
+	var defer = libQ.defer();
+	self.playMusic.getPlayLists(function(error, playLists){
+		if(error){
+			defer.reject('unsuccessfull from getting music playlist from google server');
+			console.error('unsuccessfull from getting music playlist from google server');
+		}
+		console.log('PlayLists', JSON.stringify(playLists, undefined, 4));
+		defer.resolve(playLists)
+	});
+	return defer.promise;
 }
 
 
@@ -226,7 +240,7 @@ googleplaymusic.prototype.handleBrowseUri = function (curUri) {
 		}
 		else if (curUri.startsWith('googleplaymusic/playlists')) {
 			if (curUri == 'googleplaymusic/playlists')
-				response = self.listPlaylists();
+				response = self.getPlaylists();
 			else {
 				response = self.listPlaylist(curUri);
 			}
