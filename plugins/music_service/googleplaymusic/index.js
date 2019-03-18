@@ -7,6 +7,11 @@ var exec = require("child_process").exec;
 var execSync = require("child_process").execSync;
 var PLAY_MUSIC = require("playmusic");
 
+// TODO: Remove it, if it is still commented out.
+// PLAY_MUSIC.prototype.getPlayListById = function () {
+//   let url = `https://play.google.com/music/services/loaduserplaylist?u=1&format=jsarray&xt=CjUKATASMEFNLVdiWGcxRGNVa3FLakI2N2lkeWRid1BKRUJnM0tfOEE6MTU1Mjg5Njg4NDQ5OAo1CgExEjBBTS1XYlhpZTN6LVVobHNJQWF0by1PZUxjeldnY2xBZi1nOjE1NTI4OTY5MTc0MjA%3D&dv=235752084&obfid=12329453552080486674`
+// }
+
 module.exports = googleplaymusic;
 function googleplaymusic(context) {
   var self = this;
@@ -16,6 +21,7 @@ function googleplaymusic(context) {
   this.logger = this.context.logger;
   this.configManager = this.context.configManager;
   this.playMusic = new PLAY_MUSIC();
+  this.playListSongs = []
 }
 
 googleplaymusic.prototype.onVolumioStart = function () {
@@ -112,56 +118,6 @@ googleplaymusic.prototype.saveGoogleAccount = function (data) {
     // 				defer.resolve({});
     // 		});
     // });
-  });
-  return defer.promise;
-};
-
-googleplaymusic.prototype.getPlaylists = function () {
-  console.log("I am getting playlist.. bro Just wait for few seconds.");
-  var self = this;
-  var defer = libQ.defer();
-
-  console.log("calling google api for playlist");
-  self.playMusic.getPlayLists(function (error, response) {
-    if (error) {
-      defer.reject(
-        "unsuccessfull from getting music playlist from google server"
-      );
-      return console.error(
-        "unsuccessfull from getting music playlist from google server"
-      );
-    }
-    console.log(
-      "PlayLists api response",
-      JSON.stringify(response, undefined, 4)
-    );
-    let playLists = response.data.items;
-    console.log("PlayLists =", JSON.stringify(playLists, undefined, 4));
-    let volumioFormatList = {
-      navigation: {
-        prev: {
-          uri: "googleplaymusic"
-        },
-        lists: [
-          {
-            availableListViews: ["list"],
-            items: []
-          }
-        ]
-      }
-    };
-    let playListAccumulator = volumioFormatList.navigation.lists[0].items;
-    for (let i = 0; i < playLists.length; i++) {
-      let formatedPlaylistData = {
-        // service: 'spop',
-        type: "folder",
-        title: playLists[i]["name"],
-        icon: "fa fa-list-ol",
-        uri: "googleplaymusic/playlists/" + i
-      };
-      playListAccumulator.push(formatedPlaylistData);
-    }
-    defer.resolve(volumioFormatList);
   });
   return defer.promise;
 };
@@ -284,7 +240,7 @@ googleplaymusic.prototype.handleBrowseUri = function (curUri) {
     if (curUri == "googleplaymusic/playlists") {
       response = self.getPlaylists();
     } else {
-      response = self.listPlaylist(curUri);
+      response = self.getSongsInPlaylist(curUri);
     }
   } else if (curUri.startsWith("googleplaymusic/featuredplaylists")) {
     response = self.featuredPlaylists(curUri);
@@ -307,6 +263,114 @@ googleplaymusic.prototype.handleBrowseUri = function (curUri) {
   return response;
 };
 
+googleplaymusic.prototype.getPlaylists = function () {
+  console.log("I am getting playlist.. bro Just wait for few seconds.");
+  var self = this;
+  var defer = libQ.defer();
+
+  console.log("calling google api for playlist");
+  self.playMusic.getPlayLists(function (error, response) {
+    if (error) {
+      defer.reject(
+        "unsuccessfull from getting music playlist from google server"
+      );
+      return console.error(
+        "unsuccessfull from getting music playlist from google server"
+      );
+    }
+    console.log(
+      "PlayLists api response",
+      JSON.stringify(response, undefined, 4)
+    );
+    let playLists = response.data.items;
+    console.log("PlayLists =", JSON.stringify(playLists, undefined, 4));
+    let volumioFormatList = {
+      navigation: {
+        prev: {
+          uri: "googleplaymusic"
+        },
+        lists: [
+          {
+            availableListViews: ["list"],
+            items: []
+          }
+        ]
+      }
+    };
+    let playListAccumulator = volumioFormatList.navigation.lists[0].items;
+    for (let i = 0; i < playLists.length; i++) {
+      let formatedPlaylistData = {
+        // service: 'spop',
+        type: "folder",
+        title: playLists[i]["name"],
+        icon: "fa fa-list-ol",
+        uri: "googleplaymusic/playlists/" + playLists[i]['id'],
+      };
+      playListAccumulator.push(formatedPlaylistData);
+    }
+    defer.resolve(volumioFormatList);
+    self.playMusic.getPlayListEntries(function (error, playListSongs) {
+      if (error) {
+        console.error('Error getting playlist songs');
+      }
+      self.playListSongs = playListSongs.data.items;
+      console.log('Yeah got the playlist songs', JSON.stringify(playListSongs.data.items[0], undefined, 4))
+    })
+  });
+  return defer.promise;
+};
+
+googleplaymusic.prototype.getSongsInPlaylist = function (curUri) {
+  //  googleplaymusic/playlists/e757c0eb-2391-4f9b-a75a-f214476e94b4
+
+  var self = this;
+  var defer = libQ.defer();
+  let playListId = curUri.split('/')[2];
+  var response = {
+    navigation: {
+      prev: {
+        uri: curUri
+      },
+      "lists": [
+        {
+          "availableListViews": [
+            "list"
+          ],
+          "items": [
+
+          ]
+        }
+      ]
+    }
+  };
+  let playListSongs = self.playListSongs
+  for (let i in playListSongs) {
+    let track = playListSongs[i];
+    if (track.playlistId === playListId) {
+      self.playMusic.getStreamUrl(track.trackId, function (error, streamUri) {
+        if (error) {
+          return console.error('Error gettting stream data');
+        }
+        let trackData = track.track
+        response.navigation.lists[0].items.push({
+          // service: 'spop',
+          type: 'song',
+          title: trackData.title,
+          artist: trackData.artist,
+          album: trackData.album,
+          icon: 'fa fa-spotify',
+          uri: streamUri,
+        });
+      })
+    }
+  }
+  setTimeout(() => { defer.resolve(response); }, 3000)
+  return defer.promise
+}
+
+// googleplaymusic.prototype.listPlaylist = function (uri) {
+//   let playlistIndex = 
+// }
 // Define a method to clear, add, and play an array of tracks
 googleplaymusic.prototype.clearAddPlayTrack = function (track) {
   var self = this;
