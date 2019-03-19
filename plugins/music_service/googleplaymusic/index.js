@@ -180,7 +180,7 @@ googleplaymusic.prototype.handleBrowseUri = function (curUri) {
             availableListViews: ["list"],
             items: [
               {
-                service: "spop",
+                service: "googleplaymusic",
                 type: "googleplaymusic-category",
                 title: "My Playlists",
                 artist: "",
@@ -189,7 +189,7 @@ googleplaymusic.prototype.handleBrowseUri = function (curUri) {
                 uri: "googleplaymusic/playlists"
               },
               {
-                service: "spop",
+                service: "googleplaymusic",
                 type: "googleplaymusic-category",
                 title: "Featured Playlists",
                 artist: "",
@@ -198,7 +198,7 @@ googleplaymusic.prototype.handleBrowseUri = function (curUri) {
                 uri: "googleplaymusic/featuredplaylists"
               },
               {
-                service: "spop",
+                service: "googleplaymusic",
                 type: "googleplaymusic-category",
                 title: "What's New",
                 artist: "",
@@ -207,7 +207,7 @@ googleplaymusic.prototype.handleBrowseUri = function (curUri) {
                 uri: "googleplaymusic/new"
               },
               {
-                service: "spop",
+                service: "googleplaymusic",
                 type: "googleplaymusic-category",
                 title: "Genres & Moods",
                 artist: "",
@@ -366,7 +366,7 @@ googleplaymusic.prototype.seek = function (timepos) {
     "[" + Date.now() + "] " + "googleplaymusic::seek to " + timepos
   );
 
-  return this.sendSpopCommand("seek " + timepos, []);
+  // return this.sendSpopCommand("seek " + timepos, []);
 };
 
 // Stop
