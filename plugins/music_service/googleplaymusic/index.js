@@ -15,7 +15,6 @@ var PLAY_MUSIC = require("playmusic");
 module.exports = googleplaymusic;
 function googleplaymusic(context) {
   var self = this;
-
   this.context = context;
   this.commandRouter = this.context.coreCommand;
   this.logger = this.context.logger;
@@ -260,10 +259,6 @@ googleplaymusic.prototype.getPlaylists = function () {
         "unsuccessfull from getting music playlist from google server"
       );
     }
-    console.log(
-      "PlayLists api response",
-      JSON.stringify(response, undefined, 4)
-    );
     let playLists = response.data.items;
     let volumioFormatList = {
       navigation: {
@@ -281,7 +276,7 @@ googleplaymusic.prototype.getPlaylists = function () {
     let playListAccumulator = volumioFormatList.navigation.lists[0].items;
     for (let i = 0; i < playLists.length; i++) {
       let formatedPlaylistData = {
-        // service: 'spop',
+        service: 'googleplaymusic',
         type: "folder",
         title: playLists[i]["name"],
         icon: "fa fa-list-ol",
@@ -323,8 +318,7 @@ googleplaymusic.prototype.getSongsInPlaylist = function (curUri) {
       ]
     }
   };
-  let playListSongs = self.playListSongs
-  console.log('playlist songs', playListSongs[0]);
+  let playListSongs = self.playListSongs;
   for (let i in playListSongs) {
     let track = playListSongs[i];
     if (track.playlistId === playListId) {
@@ -335,7 +329,7 @@ googleplaymusic.prototype.getSongsInPlaylist = function (curUri) {
         title: trackData.title,
         artist: trackData.artist,
         album: trackData.album,
-        icon: 'fa fa-spotify',
+        icon: 'fa ',
         uri: 'googleplaymusic:track:' + track.trackId,
       });
     }
@@ -355,9 +349,48 @@ googleplaymusic.prototype.clearAddPlayTrack = function (track) {
     if (error) {
       return console.error('Error gettting stream data');
     }
-    console.log('got the stream', stream);
     streamUrl = stream;
-    self.mpdPlugin.sendMpdCommand('load "' + streamUrl + '"', []);
+    // sending command to stop current playing song.
+    self.mpdPlugin.sendMpdCommand('stop', [])
+      .then(function () {
+        return self.mpdPlugin.sendMpdCommand('clear', []);
+      })
+      .then(function (values) {
+        return self.mpdPlugin.sendMpdCommand('load "' + streamUrl + '"', []);
+      })
+      .fail(function (data) {
+        return self.mpdPlugin.sendMpdCommand('add "' + streamUrl + '"', []);
+      })
+      .then(function () {
+        //self.commandRouter.stateMachine.setConsumeUpdateService('youtube', true);
+        //this.mpdPlugin.ignoreUpdate(true);
+        self.mpdPlugin.clientMpd.on('system', function (status) {
+          var timeStart = Date.now();
+          self.logger.info('Google Play Music: ' + status);
+          self.mpdPlugin.getState().then(function (state) {
+            state.trackType = "Google Play Music";
+            return self.commandRouter.stateMachine.syncState(state, "googleplaymusic");
+          });
+        });
+        return self.mpdPlugin.sendMpdCommand('play', []).then(function () {
+          self.commandRouter.pushConsoleMessage("googleplaymusic::After Play");
+          return self.mpdPlugin.getState().then(function (state) {
+            state.trackType = "Google Play Music";
+            self.commandRouter.pushConsoleMessage("googleplaymusic: " + JSON.stringify(state));
+            return self.commandRouter.stateMachine.syncState(state, "googleplaymusic");
+          });
+        });
+      })
+      .fail(function (e) {
+        return defer.reject(new Error());
+      });
+
+    // end youtube code
+
+
+
+
+    // self.mpdPlugin.sendMpdCommand('load "' + streamUrl + '"', []);
   });
 };
 
@@ -418,15 +451,59 @@ googleplaymusic.prototype.explodeUri = function (uri) {
   var defer = libQ.defer();
   var response = [];
   // Mandatory: retrieve all info for a given URI
-  let trackId = uri.split(':')[2];
+  if (uri.includes('playlist')) {
+    // getting songs for a particular playlist to add in queue.
+    self.logger.info("googleplaymusic::explodeUri Playlist: " + uri);
+    let playlistId = uri.split('/').pop();
+    response = self.addPlaylist(playlistId);
+  } else {
+    let trackId = uri.split(':')[2];
+    let trackData = self.getTrackInfo(trackId);
+    response.push(trackData);
+  }
+  setTimeout(function () { defer.resolve(response) }, 1000);
+  return defer.promise;
+};
+
+googleplaymusic.prototype.addPlaylist = function (playlistId) {
+  var self = this;
+  let songsInPlaylist = [];
+  for (let i = 0; i < self.playListSongs.length; i++) {
+    if (self.playListSongs[i].playlistId === playlistId) {
+      let track = self.playListSongs[i];
+      let trackId = track.trackId;
+      let trackInfo = track.track;
+      // TODO: make single function for getting volumio for data of a song.
+      let volumioFormatSongData = {
+        uri: trackId,
+        service: 'googleplaymusic',
+        type: 'song',
+        name: trackInfo.title,
+        title: trackInfo.title,
+        artist: trackInfo.artist,
+        album: trackInfo.album,
+        duration: trackInfo.durationMillis / 1000,
+        albumart: trackInfo.albumArtRef[0].url,
+        samplerate: self.samplerate,
+        bitdepth: '16 bit',
+        trackType: 'googleplaymusic'
+      };
+      songsInPlaylist.push(volumioFormatSongData);
+    }
+  }
+  return songsInPlaylist;
+}
+
+googleplaymusic.prototype.getTrackInfo = function (trackId) {
+  var self = this;
   let trackInfo;
   for (let i = 0; i < self.playListSongs.length; i++) {
     if (self.playListSongs[i].trackId === trackId) {
       trackInfo = self.playListSongs[i].track;
+      break; // we found the song in the list, we don't need to go anymore further. Sometimes it's good to return from the road, when you meet your ends.
     }
   }
-  // TODO: put track finding in a different method
-  var item = {
+  return {
     uri: trackId,
     service: 'googleplaymusic',
     type: 'song',
@@ -435,15 +512,12 @@ googleplaymusic.prototype.explodeUri = function (uri) {
     artist: trackInfo.artist,
     album: trackInfo.album,
     duration: trackInfo.durationMillis / 1000,
-    albumart: '',
+    albumart: trackInfo.albumArtRef[0].url,
     samplerate: self.samplerate,
-    // bitdepth: '16 bit',
+    bitdepth: '16 bit',
     trackType: 'googleplaymusic'
   };
-  response.push(item);
-  setTimeout(function () { defer.resolve(response) }, 1000);
-  return defer.promise;
-};
+}
 
 googleplaymusic.prototype.getAlbumArt = function (data, path) {
   var artist, album;
