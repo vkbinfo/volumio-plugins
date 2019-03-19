@@ -32,7 +32,9 @@ googleplaymusic.prototype.onVolumioStart = function () {
   );
   this.config = new (require("v-conf"))();
   this.config.loadFile(configFile);
-
+  if (self.config.get('bitrate') === true)
+    self.samplerate = "320Kbps";
+  else self.samplerate = "128Kbps";
   return libQ.resolve();
 };
 
@@ -40,11 +42,11 @@ googleplaymusic.prototype.onStart = function () {
   var self = this;
   var defer = libQ.defer();
   // Once the Plugin has successfull started resolve the promise
+  self.mpdPlugin = self.commandRouter.pluginManager.getPlugin('music_service', 'mpd');
   self.addToBrowseSources();
   let masterToken = self.config.get("masterToken");
   let androidId = self.config.get("androidId");
   let googleAuthData = { masterToken: masterToken, androidId: androidId };
-  console.log("google login data", googleAuthData);
   self.playMusic.init(googleAuthData, function (error) {
     if (error) {
       self.commandRouter.pushToastMessage(
@@ -103,21 +105,6 @@ googleplaymusic.prototype.saveGoogleAccount = function (data) {
     self.config.set("bitrate", bitrate);
     self.config.set("masterToken", authTokenData.masterToken);
     self.config.set("androidId", authTokenData.androidId);
-    console.log("returned token", authTokenData);
-    // place code here
-    // // place code here
-    // console.log('Google play Music', playMusic.getPlayListEntries(function (err, playlists){
-    // 	if(err) console.log('error in getting playlist', err);
-    // 	console.log('Playlists', JSON.stringify(playlists, undefined, 2) );
-    // }));
-    // 	this.playMusic.getAllTracks(function(err, library) {
-    // 		var song = library.data.items.pop();
-    // 		console.log(song);
-    // 		playMusic.getStreamUrl(song.id, function(err, streamUrl) {
-    // 				console.log('streamurl', streamUrl);
-    // 				defer.resolve({});
-    // 		});
-    // });
   });
   return defer.promise;
 };
@@ -257,18 +244,13 @@ googleplaymusic.prototype.handleBrowseUri = function (curUri) {
   } else if (curUri.startsWith("googleplaymusic:artist:")) {
     response = self.listWebArtist(curUri);
   }
-  response.then(function (data) {
-    console.log("returning response", JSON.stringify(data, undefined, 4));
-  });
   return response;
 };
 
 googleplaymusic.prototype.getPlaylists = function () {
-  console.log("I am getting playlist.. bro Just wait for few seconds.");
   var self = this;
   var defer = libQ.defer();
 
-  console.log("calling google api for playlist");
   self.playMusic.getPlayLists(function (error, response) {
     if (error) {
       defer.reject(
@@ -283,7 +265,6 @@ googleplaymusic.prototype.getPlaylists = function () {
       JSON.stringify(response, undefined, 4)
     );
     let playLists = response.data.items;
-    console.log("PlayLists =", JSON.stringify(playLists, undefined, 4));
     let volumioFormatList = {
       navigation: {
         prev: {
@@ -314,7 +295,6 @@ googleplaymusic.prototype.getPlaylists = function () {
         console.error('Error getting playlist songs');
       }
       self.playListSongs = playListSongs.data.items;
-      console.log('Yeah got the playlist songs', JSON.stringify(playListSongs.data.items[0], undefined, 4))
     })
   });
   return defer.promise;
@@ -344,27 +324,23 @@ googleplaymusic.prototype.getSongsInPlaylist = function (curUri) {
     }
   };
   let playListSongs = self.playListSongs
+  console.log('playlist songs', playListSongs[0]);
   for (let i in playListSongs) {
     let track = playListSongs[i];
     if (track.playlistId === playListId) {
-      self.playMusic.getStreamUrl(track.trackId, function (error, streamUri) {
-        if (error) {
-          return console.error('Error gettting stream data');
-        }
-        let trackData = track.track
-        response.navigation.lists[0].items.push({
-          // service: 'spop',
-          type: 'song',
-          title: trackData.title,
-          artist: trackData.artist,
-          album: trackData.album,
-          icon: 'fa fa-spotify',
-          uri: streamUri,
-        });
-      })
+      let trackData = track.track;
+      response.navigation.lists[0].items.push({
+        service: 'googleplaymusic', // plugin name
+        type: 'song',
+        title: trackData.title,
+        artist: trackData.artist,
+        album: trackData.album,
+        icon: 'fa fa-spotify',
+        uri: 'googleplaymusic:track:' + track.trackId,
+      });
     }
   }
-  setTimeout(() => { defer.resolve(response); }, 3000)
+  setTimeout(() => { defer.resolve(response); }, 50)
   return defer.promise
 }
 
@@ -374,13 +350,15 @@ googleplaymusic.prototype.getSongsInPlaylist = function (curUri) {
 // Define a method to clear, add, and play an array of tracks
 googleplaymusic.prototype.clearAddPlayTrack = function (track) {
   var self = this;
-  self.commandRouter.pushConsoleMessage(
-    "[" + Date.now() + "] " + "googleplaymusic::clearAddPlayTrack"
-  );
-
-  self.commandRouter.logger.info(JSON.stringify(track));
-
-  return self.sendSpopCommand("uplay", [track.uri]);
+  let streamUrl = '';
+  self.playMusic.getStreamUrl(track.uri, function (error, stream) {
+    if (error) {
+      return console.error('Error gettting stream data');
+    }
+    console.log('got the stream', stream);
+    streamUrl = stream;
+    self.mpdPlugin.sendMpdCommand('load "' + streamUrl + '"', []);
+  });
 };
 
 googleplaymusic.prototype.seek = function (timepos) {
@@ -438,9 +416,32 @@ googleplaymusic.prototype.pushState = function (state) {
 googleplaymusic.prototype.explodeUri = function (uri) {
   var self = this;
   var defer = libQ.defer();
-
+  var response = [];
   // Mandatory: retrieve all info for a given URI
-
+  let trackId = uri.split(':')[2];
+  let trackInfo;
+  for (let i = 0; i < self.playListSongs.length; i++) {
+    if (self.playListSongs[i].trackId === trackId) {
+      trackInfo = self.playListSongs[i].track;
+    }
+  }
+  // TODO: put track finding in a different method
+  var item = {
+    uri: trackId,
+    service: 'googleplaymusic',
+    type: 'song',
+    name: trackInfo.title,
+    title: trackInfo.title,
+    artist: trackInfo.artist,
+    album: trackInfo.album,
+    duration: trackInfo.durationMillis / 1000,
+    albumart: '',
+    samplerate: self.samplerate,
+    // bitdepth: '16 bit',
+    trackType: 'googleplaymusic'
+  };
+  response.push(item);
+  setTimeout(function () { defer.resolve(response) }, 1000);
   return defer.promise;
 };
 
