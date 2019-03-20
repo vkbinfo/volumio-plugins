@@ -7,10 +7,7 @@ var exec = require("child_process").exec;
 var execSync = require("child_process").execSync;
 var PLAY_MUSIC = require("playmusic");
 
-// TODO: Remove it, if it is still commented out.
-// PLAY_MUSIC.prototype.getPlayListById = function () {
-//   let url = `https://play.google.com/music/services/loaduserplaylist?u=1&format=jsarray&xt=CjUKATASMEFNLVdiWGcxRGNVa3FLakI2N2lkeWRid1BKRUJnM0tfOEE6MTU1Mjg5Njg4NDQ5OAo1CgExEjBBTS1XYlhpZTN6LVVobHNJQWF0by1PZUxjeldnY2xBZi1nOjE1NTI4OTY5MTc0MjA%3D&dv=235752084&obfid=12329453552080486674`
-// }
+let PLAY_MUSIC_CONSTANTS = require('./playMusicConstants');
 
 module.exports = googleplaymusic;
 function googleplaymusic(context) {
@@ -167,89 +164,41 @@ googleplaymusic.prototype.addToBrowseSources = function () {
 
 googleplaymusic.prototype.handleBrowseUri = function (curUri) {
   var self = this;
-  var self = this;
-
-  //self.commandRouter.logger.info(curUri);
-  var response;
+  var listItemsToRender;
   if (curUri == "googleplaymusic") {
-    response = libQ.resolve({
-      navigation: {
-        lists: [
-          {
-            availableListViews: ["list"],
-            items: [
-              {
-                service: "googleplaymusic",
-                type: "googleplaymusic-category",
-                title: "My Playlists",
-                artist: "",
-                album: "",
-                icon: "fa fa-folder-open-o",
-                uri: "googleplaymusic/playlists"
-              },
-              {
-                service: "googleplaymusic",
-                type: "googleplaymusic-category",
-                title: "Featured Playlists",
-                artist: "",
-                album: "",
-                icon: "fa fa-folder-open-o",
-                uri: "googleplaymusic/featuredplaylists"
-              },
-              {
-                service: "googleplaymusic",
-                type: "googleplaymusic-category",
-                title: "What's New",
-                artist: "",
-                album: "",
-                icon: "fa fa-folder-open-o",
-                uri: "googleplaymusic/new"
-              },
-              {
-                service: "googleplaymusic",
-                type: "googleplaymusic-category",
-                title: "Genres & Moods",
-                artist: "",
-                album: "",
-                icon: "fa fa-folder-open-o",
-                uri: "googleplaymusic/categories"
-              }
-            ]
-          }
-        ],
-        prev: {
-          uri: "googleplaymusic"
-        }
-      }
-    });
+    // get's first time options, when we click on the google play music in the browse section.
+    listItemsToRender = libQ.resolve(PLAY_MUSIC_CONSTANTS.availableFeatures);
   } else if (curUri.startsWith("googleplaymusic/playlists")) {
     if (curUri == "googleplaymusic/playlists") {
-      response = self.getPlaylists();
+      listItemsToRender = self.getPlaylists();
     } else {
-      response = self.getSongsInPlaylist(curUri);
+      listItemsToRender = self.getSongsInPlaylist(curUri);
     }
+  } else if (curUri.startsWith("googleplaymusic/stations")) {
+    console.log('let us get some stations');
+    listItemsToRender = self.getStations();
   } else if (curUri.startsWith("googleplaymusic/featuredplaylists")) {
-    response = self.featuredPlaylists(curUri);
+    listItemsToRender = self.featuredPlaylists(curUri);
   } else if (curUri.startsWith("googleplaymusic:user:")) {
-    response = self.listWebPlaylist(curUri);
+    listItemsToRender = self.listWebPlaylist(curUri);
   } else if (curUri.startsWith("googleplaymusic/new")) {
-    response = self.listWebNew(curUri);
+    listItemsToRender = self.listWebNew(curUri);
   } else if (curUri.startsWith("googleplaymusic/categories")) {
-    response = self.listWebCategories(curUri);
+    listItemsToRender = self.listWebCategories(curUri);
   } else if (curUri.startsWith("googleplaymusic:album")) {
-    response = self.listWebAlbum(curUri);
+    listItemsToRender = self.listWebAlbum(curUri);
   } else if (curUri.startsWith("googleplaymusic/category")) {
-    response = self.listWebCategory(curUri);
+    listItemsToRender = self.listWebCategory(curUri);
   } else if (curUri.startsWith("googleplaymusic:artist:")) {
-    response = self.listWebArtist(curUri);
+    listItemsToRender = self.listWebArtist(curUri);
   }
-  return response;
+  return listItemsToRender;
 };
+
 
 googleplaymusic.prototype.getPlaylists = function () {
   var self = this;
   var defer = libQ.defer();
-
   self.playMusic.getPlayLists(function (error, response) {
     if (error) {
       defer.reject(
@@ -308,12 +257,8 @@ googleplaymusic.prototype.getSongsInPlaylist = function (curUri) {
       },
       "lists": [
         {
-          "availableListViews": [
-            "list"
-          ],
-          "items": [
-
-          ]
+          "availableListViews": ["list"],
+          "items": []
         }
       ]
     }
@@ -329,13 +274,55 @@ googleplaymusic.prototype.getSongsInPlaylist = function (curUri) {
         title: trackData.title,
         artist: trackData.artist,
         album: trackData.album,
-        icon: 'fa ',
+        albumart: trackData.albumArtRef[0].url,
+        icon: 'fas fa-play',
         uri: 'googleplaymusic:track:' + track.trackId,
       });
     }
   }
   setTimeout(() => { defer.resolve(response); }, 50)
   return defer.promise
+}
+
+googleplaymusic.prototype.getStations = function () {
+  var self = this;
+  var defer = libQ.defer();
+  self.playMusic.getStations(function (error, response) {
+    if (error) {
+      defer.reject(
+        "unsuccessfull from getting music stations from google server"
+      );
+      return defer.promise;
+    }
+    let stations = response.data.items;
+    console.log('stations list', stations);
+    let volumioFormatList = {
+      navigation: {
+        prev: {
+          uri: "googleplaymusic"
+        },
+        lists: [
+          {
+            availableListViews: ["list"],
+            items: []
+          }
+        ]
+      }
+    };
+    let stationsArray = volumioFormatList.navigation.lists[0].items;
+    for (let i = 0; i < stations.length; i++) {
+      let formatedStationData = {
+        service: 'googleplaymusic',
+        type: "folder",
+        title: stations[i]["name"],
+        icon: "fa fa-list-ol",
+        uri: "googleplaymusic/stations/" + stations[i]['id'],
+      };
+      stationsArray.push(formatedStationData);
+    }
+    defer.resolve(volumioFormatList);
+  });
+  return defer.promise;
 }
 
 // googleplaymusic.prototype.listPlaylist = function (uri) {
@@ -455,7 +442,7 @@ googleplaymusic.prototype.explodeUri = function (uri) {
     // getting songs for a particular playlist to add in queue.
     self.logger.info("googleplaymusic::explodeUri Playlist: " + uri);
     let playlistId = uri.split('/').pop();
-    response = self.addPlaylist(playlistId);
+    response = self.addPlaylistToQueue(playlistId);
   } else {
     let trackId = uri.split(':')[2];
     let trackData = self.getTrackInfo(trackId);
@@ -465,7 +452,7 @@ googleplaymusic.prototype.explodeUri = function (uri) {
   return defer.promise;
 };
 
-googleplaymusic.prototype.addPlaylist = function (playlistId) {
+googleplaymusic.prototype.addPlaylistToQueue = function (playlistId) {
   var self = this;
   let songsInPlaylist = [];
   for (let i = 0; i < self.playListSongs.length; i++) {
