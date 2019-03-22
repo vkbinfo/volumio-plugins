@@ -326,7 +326,6 @@ googleplaymusic.prototype.getStations = function () {
 }
 
 googleplaymusic.prototype.getSongsInStation = function (curUri) {
-  // curUri format:-  googleplaymusic/playlists/e757c0eb-2391-4f9b-a75a-f214476e94b4
   var self = this;
   var defer = libQ.defer();
   let stationId = curUri.split('/').pop();
@@ -513,14 +512,43 @@ googleplaymusic.prototype.addPlaylistToQueue = function (playlistId) {
 googleplaymusic.prototype.addStationSongsToQueue = function (stationId) {
   var self = this;
   var defer = libQ.defer();
-  self.getSongsByStationId(stationId).then(function (stationTracks) {
-    self.stationTracks = stationTracks;
-    // console.log('Station tracks that I am getting on tracks on load of playlist', stationTracks);
+  let stationTracks = [];
+  this.playMusic.getStationTracks(stationId, 25, function (error, apiResponse) {
+    if (error) {
+      console.error(`Error getting station tracks: ${error}`);
+      defer.reject(`Error getting station tracks: ${error}`)
+      return defer.promise;
+    }
+    let stationTracksArray = apiResponse.data.stations[0].tracks;
+    for (let i in stationTracksArray) {
+      let track = stationTracksArray[i];
+      stationTracks.push({
+        service: 'googleplaymusic', // plugin name
+        uri: track.nid,
+        type: 'song',
+        trackId: track.nid, // nid works same as trackId, when we will try to get the streamurl from google.(for station songs array, google doesn't return trackId, but it does for playlist songs)
+        name: track.title,
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+        albumArtRef: track.albumArtRef,
+        albumart: track.albumArtRef[0].url,
+        samplerate: self.samplerate,
+        duration: track.durationMillis / 1000,
+        bitdepth: '16 bit',
+        trackType: 'googleplaymusic',
+      });
+    }
     defer.resolve(stationTracks);
-  }).fail(function (error) {
-    console.log(error);
-    defer.reject(error);
   })
+  // self.getSongsByStationId(stationId).then(function (stationTracks) {
+  //   self.stationTracks = stationTracks;
+  //   // console.log('Station tracks that I am getting on tracks on load of playlist', stationTracks);
+  //   defer.resolve(stationTracks);
+  // }).fail(function (error) {
+  //   console.log(error);
+  //   defer.reject(error);
+  // })
   return defer.promise;
 }
 
@@ -538,11 +566,9 @@ googleplaymusic.prototype.getSongsByStationId = function (stationId) {
     let stationTracksArray = apiResponse.data.stations[0].tracks;
     for (let i in stationTracksArray) {
       let track = stationTracksArray[i];
-      // let trackData = track.track;
-      console.log('track', track);
-      console.log('track title ', track.title);
       stationTracks.push({
         service: 'googleplaymusic', // plugin name
+        uri: 'googleplaymusic:station:track:' + track.nid,
         type: 'song',
         trackId: track.nid, // nid works same as trackId, when we will try to get the streamurl from google.(for station songs array, google doesn't return trackId, but it does for playlist songs)
         name: track.title,
@@ -555,7 +581,6 @@ googleplaymusic.prototype.getSongsByStationId = function (stationId) {
         duration: track.durationMillis / 1000,
         bitdepth: '16 bit',
         trackType: 'googleplaymusic',
-        uri: 'googleplaymusic:station:track:' + track.nid,
       });
     }
     defer.resolve(stationTracks);
@@ -568,7 +593,6 @@ googleplaymusic.prototype.getTrackInfo = function (uri) {
   console.log('uri in getting track info', uri);
   let trackId = uri.split(':').pop();
   let trackInfo;
-  console.log('The station tracks', JSON.stringify(self.stationTracks, undefined, 4));
   if (uri.includes('station')) {
     console.log('a song data', self.stationTracks[0])
     for (let i = 0; i < self.stationTracks.length; i++) {
@@ -588,6 +612,7 @@ googleplaymusic.prototype.getTrackInfo = function (uri) {
       }
     }
   }
+  console.log('Sending track info before playing', trackInfo);
   return {
     uri: trackId,
     service: 'googleplaymusic',
