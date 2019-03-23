@@ -9,7 +9,7 @@
 	"author": "Vikash",
 	"license": "ISC",
 	"volumio_info": {
-		"prettyName": "googlePlayMusic",
+		"prettyName": "Google Play Music",
 		"icon": "fa-lightbulb-o",
 		"plugin_type": "music_service"
 	},
