@@ -208,10 +208,7 @@ googleplaymusic.prototype.getStations = playMusicCore.getStations;
 
 googleplaymusic.prototype.getSongsInStation = playMusicCore.getSongsInStation;
 
-// googleplaymusic.prototype.listPlaylist = function (uri) {
-//   let playlistIndex = 
-// }
-// Define a method to clear, add, and play an array of tracks
+
 googleplaymusic.prototype.clearAddPlayTrack = function (track) {
   var self = this;
   var streamUrl = '';
@@ -382,10 +379,18 @@ googleplaymusic.prototype.getAlbumArt = function (data, path) {
 
 googleplaymusic.prototype.search = function (query) {
   var self = this;
+  var queryMatchedSongs = [];
   var defer = libQ.defer();
-
+  playMusicCore.searchSong(self, query.value).then(function (error, songlist) {
+    if (error) {
+      console.error('Error getting song based on search query from Google Play Music Server.', error);
+      defer.reject(error);
+    } else {
+      queryMatchedSongs.push({ type: 'title', title: 'Play Music Tracks', availableListViews: ["list"], items: songlist });
+      defer.resolve(queryMatchedSongs)
+    }
+  });
   // Mandatory, search. You can divide the search in sections using following functions
-
   return defer.promise;
 };
 

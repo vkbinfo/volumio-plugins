@@ -248,6 +248,28 @@ function addStationSongsToQueue(stationId) {
   return defer.promise;
 }
 
+// pm.search("bastille lost fire", 5, function(err, data) { // max 5 results
+//   var song = data.entries.sort(function(a, b) { // sort by match score
+//       return a.score < b.score;
+//   }).shift(); // take first song
+//   console.log(song);
+//   pm.getStreamUrl(song.track.nid, function(err, streamUrl) {
+//       console.log(streamUrl);
+//   });
+// }, function(message, body, err, httpResponse) {
+//   console.log(message);
+// });
+function searchSong(service, queryString) {
+  var defer = libQ.defer();
+  console.log('query string', queryString);
+  service.playMusic.search(queryString, 10, function (error, responseSongs) { // the second parameter is for returned songs in t
+    var songs = responseSongs.entries.sort(function (songA, songB) {
+      return songA.score < songB.score;
+    });
+    console.log('Got search songs', songs);
+  });
+}
+
 // function getSongsByStationId(stationId) {
 //   var self = this;
 //   var defer = libQ.defer();
@@ -332,4 +354,5 @@ module.exports = {
   addStationSongsToQueue: addStationSongsToQueue,
   // getSongsByStationId: getSongsByStationId,
   getTrackInfo: getTrackInfo,
+  searchSong: searchSong
 };
