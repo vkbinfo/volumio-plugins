@@ -263,13 +263,135 @@ function searchSong(service, queryString) {
   var defer = libQ.defer();
   console.log('query string', queryString);
   service.playMusic.search(queryString, 10, function (error, responseSongs) { // the second parameter is for returned songs in t
-    var songs = responseSongs.entries.sort(function (songA, songB) {
-      return songA.score < songB.score;
-    });
-    console.log('Got search songs', songs);
+    if (error) {
+      defer.reject(error);
+    } else {
+      var results = responseSongs.entries.sort(function (resultA, resultB) {
+        return resultA.score < resultB.score;
+      });
+      var volumioFormated = [];
+      var artistList = getArtistsFromList(results);
+      var albumsList = getAlbumsFromList(results);
+      var playlist = getPlaylistsFromList(results);
+      var songList = getTracksFromList(results);
+      volumioFormated.push({ type: 'title', title: 'Play Music Artists', availableListViews: ["list", "grid"], items: artistList });
+      volumioFormated.push({ type: 'title', title: 'Play Music Albums', availableListViews: ["list", "grid"], items: albumsList });
+      volumioFormated.push({ type: 'title', title: 'Play Music Playlists', availableListViews: ["list", "grid"], items: playlist });
+      volumioFormated.push({ type: 'title', title: 'Play Music Tracks', availableListViews: ["list"], items: songList });
+      defer.resolve(volumioFormated);
+    }
   });
+  return defer.promise;
 }
 
+function getAlbumsFromList(entityArray) {
+  var list = [];
+  for (var i in entityArray) {
+    var entity = entityArray[i];
+    if (entity.type === '3') {// for album type string is 3.
+      list.push({
+        service: 'googleplaymusic',
+        type: 'folder',
+        title: entity.album.name,
+        albumart: entity.album.albumArtRef,
+        uri: 'googleplaymusic:album:' + entity.album.albumId
+      });
+    }
+  }
+  return list;
+}
+
+function getPlaylistsFromList(entityArray) {
+  var list = [];
+  for (var i in entityArray) {
+    var entity = entityArray[i];
+    if (entity.type === '4') {// for album type string is 4.
+      list.push({
+        service: 'googleplaymusic',
+        type: 'folder',
+        title: entity.playlist.name,
+        albumart: entity.playlist.ownerProfilePhotoUrl,
+        // TODO: check it uri will work with shareToken or not.
+        uri: 'googleplaymusic:playlist:' + entity.playlist.shareToken
+      });
+    }
+  }
+  return list;
+}
+
+function getArtistsFromList(entityArray) {
+  var list = [];
+  for (var i in entityArray) {
+    var entity = entityArray[i];
+    if (entity.type === '2') {// for album type string is 2.
+      list.push({
+        service: 'googleplaymusic',
+        type: 'folder',
+        title: entity.artist.name,
+        albumart: entity.artist.artistArtRef,
+        uri: 'googleplaymusic:artist:' + entity.artist.shareToken
+      });
+    }
+  }
+  return list;
+}
+
+function getTracksFromList(entityArray) {
+  var list = [];
+  for (var i in entityArray) {
+    var entity = entityArray[i];
+    if (entity.type === '1') {// for album type string is 2.
+      /**
+       * { type: '1',
+ track:
+ { kind: 'sj#track',
+ lastModifiedTimestamp: '1553337577777784',
+ title: 'Space Song',
+ artist: 'Beach House',
+ composer: '',
+ album: 'Depression Cherry',
+ albumArtist: 'Beach House',
+ year: 2015,
+ trackNumber: 3,
+ durationMillis: '320000',
+ albumArtRef: [Array],
+ playCount: 70,
+ discNumber: 1,
+ rating: '5',
+ estimatedSize: '12820935',
+ trackType: '7',
+ storeId: 'Tl4ylv2pzjhgrjn344moyycbc2e',
+ albumId: 'rrofwxyzkr3ue5nrdbr5ps6csy',
+ artistId: [Array],
+ nid: 'l4ylv2pzjhgrjn344moyycbc2e',
+ trackAvailableForSubscription: true,
+ trackAvailableForPurchase: true,
+ albumAvailableForPurchase: false,
+ contentType: '2',
+ lastRatingChangeTimestamp: '1542366306445000' } },
+       */
+      list.push({
+        /**
+         * 	service: 'spop',
+			type: 'song',
+			title: track.name,
+			artist: track.artists[0].name,
+			album: track.album.name,
+			albumart: albumart,
+			uri: track.uri
+         */
+        service: 'googleplaymusic',
+        type: 'song',
+        title: entity.track.title,
+        artist: entity.track.artist,
+        album: entity.track.album,
+        albumart: entity.track.artistArtRef,
+        uri: 'googleplaymusic:track:' + entity.track.nid
+      });
+    }
+  }
+  return list;
+}
 // function getSongsByStationId(stationId) {
 //   var self = this;
 //   var defer = libQ.defer();

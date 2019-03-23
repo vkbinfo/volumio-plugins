@@ -381,16 +381,13 @@ googleplaymusic.prototype.search = function (query) {
   var self = this;
   var queryMatchedSongs = [];
   var defer = libQ.defer();
-  playMusicCore.searchSong(self, query.value).then(function (error, songlist) {
-    if (error) {
-      console.error('Error getting song based on search query from Google Play Music Server.', error);
-      defer.reject(error);
-    } else {
-      queryMatchedSongs.push({ type: 'title', title: 'Play Music Tracks', availableListViews: ["list"], items: songlist });
-      defer.resolve(queryMatchedSongs)
-    }
+  playMusicCore.searchSong(self, query.value).then(function (categoryData) {
+    console.log('returning category data', categoryData);
+    defer.resolve(categoryData);
+  }).fail(function (error) {
+    console.error('Error getting song based on search query from Google Play Music Server.', error);
+    defer.reject(error);
   });
-  // Mandatory, search. You can divide the search in sections using following functions
   return defer.promise;
 };
 
