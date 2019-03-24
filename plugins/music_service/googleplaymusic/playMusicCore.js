@@ -248,17 +248,6 @@ function addStationSongsToQueue(stationId) {
   return defer.promise;
 }
 
-// pm.search("bastille lost fire", 5, function(err, data) { // max 5 results
-//   var song = data.entries.sort(function(a, b) { // sort by match score
-//       return a.score < b.score;
-//   }).shift(); // take first song
-//   console.log(song);
-//   pm.getStreamUrl(song.track.nid, function(err, streamUrl) {
-//       console.log(streamUrl);
-//   });
-// }, function(message, body, err, httpResponse) {
-//   console.log(message);
-// });
 function searchSong(service, queryString) {
   var defer = libQ.defer();
   console.log('query string', queryString);
@@ -273,11 +262,11 @@ function searchSong(service, queryString) {
       var artistList = getArtistsFromList(results);
       var albumsList = getAlbumsFromList(results);
       var playlist = getPlaylistsFromList(results);
-      var songList = getTracksFromList(results);
+      var songList = getTracksFromList(service, results);
+      volumioFormated.push({ type: 'title', title: 'Play Music Tracks', availableListViews: ["list"], items: songList });
       volumioFormated.push({ type: 'title', title: 'Play Music Artists', availableListViews: ["list", "grid"], items: artistList });
       volumioFormated.push({ type: 'title', title: 'Play Music Albums', availableListViews: ["list", "grid"], items: albumsList });
       volumioFormated.push({ type: 'title', title: 'Play Music Playlists', availableListViews: ["list", "grid"], items: playlist });
-      volumioFormated.push({ type: 'title', title: 'Play Music Tracks', availableListViews: ["list"], items: songList });
       defer.resolve(volumioFormated);
     }
   });
@@ -336,57 +325,20 @@ function getArtistsFromList(entityArray) {
   return list;
 }
 
-function getTracksFromList(entityArray) {
+function getTracksFromList(googlePlayMusic, entityArray) {
   var list = [];
   for (var i in entityArray) {
     var entity = entityArray[i];
     if (entity.type === '1') {// for album type string is 2.
-      /**
-       * { type: '1',
- track:
- { kind: 'sj#track',
- lastModifiedTimestamp: '1553337577777784',
- title: 'Space Song',
- artist: 'Beach House',
- composer: '',
- album: 'Depression Cherry',
- albumArtist: 'Beach House',
- year: 2015,
- trackNumber: 3,
- durationMillis: '320000',
- albumArtRef: [Array],
- playCount: 70,
- discNumber: 1,
- rating: '5',
- estimatedSize: '12820935',
- trackType: '7',
- storeId: 'Tl4ylv2pzjhgrjn344moyycbc2e',
- albumId: 'rrofwxyzkr3ue5nrdbr5ps6csy',
- artistId: [Array],
- nid: 'l4ylv2pzjhgrjn344moyycbc2e',
- trackAvailableForSubscription: true,
- trackAvailableForPurchase: true,
- albumAvailableForPurchase: false,
- contentType: '2',
- lastRatingChangeTimestamp: '1542366306445000' } },
-       */
+      googlePlayMusic.searchTracks.push(entity.track);
       list.push({
-        /**
-         * 	service: 'spop',
-			type: 'song',
-			title: track.name,
-			artist: track.artists[0].name,
-			album: track.album.name,
-			albumart: albumart,
-			uri: track.uri
-         */
         service: 'googleplaymusic',
         type: 'song',
         title: entity.track.title,
         artist: entity.track.artist,
         album: entity.track.album,
         albumart: entity.track.artistArtRef,
-        uri: 'googleplaymusic:track:' + entity.track.nid
+        uri: 'googleplaymusic:search:track:' + entity.track.nid
       });
     }
   }
@@ -433,23 +385,32 @@ function getTrackInfo(uri) {
   var trackId = uri.split(':').pop();
   var trackInfo;
   if (uri.includes('station')) {
-    console.log('a song data', self.stationTracks[0]);
-    for (var i = 0; i < self.stationTracks.length; i++) {
-      // getting station song from the stored station songs.
-      console.log('Getting station id', self.stationTracks[i].trackId);
-      if (self.stationTracks[i].trackId === trackId) {
-        trackInfo = self.stationTracks[i];
-        console.log('Track Info that I got for clicking on the station song', trackInfo);
-        break;
-      }
-    }
+    console.log('a song data in searchTrack Array', self.stationTracks[0]);
+    trackInfo = self.stationTracks.find(function (track) {
+      return track.trackId === trackId;
+    });
+    console.log('Track Info that I got for clicking on the station song', trackInfo);
+    // for (var i = 0; i < self.stationTracks.length; i++) {
+    //   // getting station song from the stored station songs.
+    //   console.log('Getting track Id for station songs', self.stationTracks[i].trackId);
+    //   if (self.stationTracks[i].trackId === trackId) {
+    //     trackInfo = self.stationTracks[i];
+    //     console.log('Track Info that I got for clicking on the station song', trackInfo);
+    //     break;
+    //   }
+    // }
+  } else if (uri.includes('search:track')) {
+    console.log('a song data in searchTrack Array', self.searchTracks[0]);
+    trackInfo = self.searchTracks.find(function (track) {
+      return track.nid === trackId;
+    });
+    console.log('Track Info that I got for clicking on the search song', trackInfo);
   } else {
-    for (var index = 0; index < self.playListSongs.length; index++) {
-      if (self.playListSongs[index].trackId === trackId) {
-        trackInfo = self.playListSongs[index].track;
-        break;
-      }
-    }
+    var trackResult = self.playListSongs.find(function (track) {
+      return track.trackId === trackId;
+    });
+    trackInfo = trackResult.track;
+    console.log('Track Info that I got for clicking on the a playlist song', trackInfo);
   }
   return {
     uri: trackId,

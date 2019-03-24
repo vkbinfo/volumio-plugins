@@ -19,6 +19,7 @@ function googleplaymusic(context) {
   self.playMusic = new PLAY_MUSIC();
   self.playListSongs = [];
   self.stationTracks = [];
+  self.searchTracks = [];
 }
 
 googleplaymusic.prototype.onVolumioStart = function () {
@@ -214,6 +215,7 @@ googleplaymusic.prototype.clearAddPlayTrack = function (track) {
   var streamUrl = '';
   var defer = libQ.defer();
   console.log('getting track for stream uri', track);
+  console.log('sending uri to get the stream ', track.uri);
   self.playMusic.getStreamUrl(track.uri, function (error, stream) {
     if (error) {
       return console.error('Error gettting stream data', error);
