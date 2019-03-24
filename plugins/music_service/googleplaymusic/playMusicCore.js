@@ -338,7 +338,7 @@ function getTracksFromList(googlePlayMusic, entityArray) {
         artist: entity.track.artist,
         album: entity.track.album,
         albumart: entity.track.artistArtRef,
-        uri: 'googleplaymusic:search:track:' + entity.track.nid
+        uri: 'googleplaymusic:search:track:' + entity.track.storeId
       });
     }
   }
@@ -385,32 +385,18 @@ function getTrackInfo(uri) {
   var trackId = uri.split(':').pop();
   var trackInfo;
   if (uri.includes('station')) {
-    console.log('a song data in searchTrack Array', self.stationTracks[0]);
     trackInfo = self.stationTracks.find(function (track) {
       return track.trackId === trackId;
     });
-    console.log('Track Info that I got for clicking on the station song', trackInfo);
-    // for (var i = 0; i < self.stationTracks.length; i++) {
-    //   // getting station song from the stored station songs.
-    //   console.log('Getting track Id for station songs', self.stationTracks[i].trackId);
-    //   if (self.stationTracks[i].trackId === trackId) {
-    //     trackInfo = self.stationTracks[i];
-    //     console.log('Track Info that I got for clicking on the station song', trackInfo);
-    //     break;
-    //   }
-    // }
   } else if (uri.includes('search:track')) {
-    console.log('a song data in searchTrack Array', self.searchTracks[0]);
     trackInfo = self.searchTracks.find(function (track) {
-      return track.nid === trackId;
+      return track.storeId === trackId;
     });
-    console.log('Track Info that I got for clicking on the search song', trackInfo);
   } else {
     var trackResult = self.playListSongs.find(function (track) {
       return track.trackId === trackId;
     });
     trackInfo = trackResult.track;
-    console.log('Track Info that I got for clicking on the a playlist song', trackInfo);
   }
   return {
     uri: trackId,
