@@ -17,9 +17,7 @@ function googleplaymusic(context) {
   self.logger = self.context.logger;
   self.configManager = self.context.configManager;
   self.playMusic = new PLAY_MUSIC();
-  self.playListSongs = [];
-  self.stationTracks = [];
-  self.searchTracks = [];
+  self.tracks = [];
 }
 
 googleplaymusic.prototype.onVolumioStart = function () {
@@ -172,7 +170,7 @@ googleplaymusic.prototype.handleBrowseUri = function (curUri) {
     listItemsToRender = libQ.resolve(PLAY_MUSIC_CONSTANTS.availableFeatures);
   } else if (curUri.startsWith("googleplaymusic/playlists")) {
     if (curUri == "googleplaymusic/playlists") {
-      listItemsToRender = self.getPlaylists();
+      listItemsToRender = self.getPlaylists(self);
     } else {
       listItemsToRender = self.getSongsInPlaylist(curUri);
     }
@@ -184,14 +182,14 @@ googleplaymusic.prototype.handleBrowseUri = function (curUri) {
     }
   } else if (curUri.startsWith("googleplaymusic/featuredplaylists")) {
     listItemsToRender = self.featuredPlaylists(curUri);
+  } else if (curUri.startsWith("googleplaymusic:album")) {
+    listItemsToRender = self.renderAlbumTracks(curUri);
   } else if (curUri.startsWith("googleplaymusic:user:")) {
     listItemsToRender = self.listWebPlaylist(curUri);
   } else if (curUri.startsWith("googleplaymusic/new")) {
     listItemsToRender = self.listWebNew(curUri);
   } else if (curUri.startsWith("googleplaymusic/categories")) {
     listItemsToRender = self.listWebCategories(curUri);
-  } else if (curUri.startsWith("googleplaymusic:album")) {
-    listItemsToRender = self.listWebAlbum(curUri);
   } else if (curUri.startsWith("googleplaymusic/category")) {
     listItemsToRender = self.listWebCategory(curUri);
   } else if (curUri.startsWith("googleplaymusic:artist:")) {
@@ -209,16 +207,43 @@ googleplaymusic.prototype.getStations = playMusicCore.getStations;
 
 googleplaymusic.prototype.getSongsInStation = playMusicCore.getSongsInStation;
 
+googleplaymusic.prototype.renderAlbumTracks = function (curUri) {
+  var self = this;
+  var defer = libQ.defer();
+  var albumId = curUri.split(':').pop();
+  var response = {
+    navigation: {
+      prev: {
+        uri: curUri
+      },
+      "lists": [
+        {
+          "availableListViews": ["list"],
+          "items": []
+        }
+      ]
+    }
+  };
+  self.getAlbumTracks(self, albumId)
+    .then(function (tracks) {
+      response.navigation.lists[0].items = tracks;
+      defer.resolve(response);
+    })
+    .fail(function (error) {
+      defer.reject(response);
+    });
+  return defer.promise;
+};
+
 
 googleplaymusic.prototype.clearAddPlayTrack = function (track) {
   var self = this;
   var streamUrl = '';
   var defer = libQ.defer();
-  console.log('getting track for stream uri', track);
-  console.log('sending uri to get the stream ', track.uri);
-  self.playMusic.getStreamUrl(track.uri, function (error, stream) {
+  var storeId = track.uri.split(':').pop();
+  self.playMusic.getStreamUrl(storeId, function (error, stream) {
     if (error) {
-      return console.error('Error gettting stream data', error);
+      return console.error('Error gettting stream url', error);
     }
     streamUrl = stream;
     // sending command to stop current playing song.
@@ -328,6 +353,9 @@ googleplaymusic.prototype.explodeUri = function (uri) {
       var stationId = uri.split('/').pop();
       return self.addStationSongsToQueue(stationId); // returns a promise don't need to create something on the defer vaiable.
     }
+  } else if (uri.startsWith('googleplaymusic:album:')) {
+    var albumId = uri.split(':').pop();
+    return self.getAlbumTracks(self, albumId);
   } else {
     trackData = self.getTrackInfo(uri);
     response.push(trackData);
@@ -343,6 +371,7 @@ googleplaymusic.prototype.addStationSongsToQueue = playMusicCore.addStationSongs
 
 // googleplaymusic.prototype.getSongsByStationId = playMusicCore.getSongsByStationId;
 
+googleplaymusic.prototype.getAlbumTracks = playMusicCore.getAlbumTracks;
 googleplaymusic.prototype.getTrackInfo = playMusicCore.getTrackInfo;
 
 googleplaymusic.prototype.getAlbumArt = function (data, path) {
@@ -383,8 +412,7 @@ googleplaymusic.prototype.search = function (query) {
   var self = this;
   var queryMatchedSongs = [];
   var defer = libQ.defer();
-  playMusicCore.searchSong(self, query.value).then(function (categoryData) {
-    console.log('returning category data', categoryData);
+  playMusicCore.searchQuery(self, query.value).then(function (categoryData) {
     defer.resolve(categoryData);
   }).fail(function (error) {
     console.error('Error getting song based on search query from Google Play Music Server.', error);

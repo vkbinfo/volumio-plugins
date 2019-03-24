@@ -1,10 +1,10 @@
 /**
- * This module is provides functions to implement Google Play Music's feature like playlist, station and methods to add songs to queues.
+ * This module is provides functions to implement Google Play Music's feature like playlist, station, methods and search 
  */
 "use strict";
 var libQ = require("kew");
 
-function getPlaylists() {
+function getPlaylists(service) {
   var self = this;
   var defer = libQ.defer();
   self.playMusic.getPlayLists(function (error, response) {
@@ -41,12 +41,13 @@ function getPlaylists() {
       };
       playListAccumulator.push(formatedPlaylistData);
     }
-    defer.resolve(volumioFormatList);
     self.playMusic.getPlayListEntries(function (error, playListSongs) {
       if (error) {
         console.error('Error getting playlist songs');
+        defer.reject('Error getting playlist songs' + error);
       }
-      self.playListSongs = playListSongs.data.items;
+      service.tracks = service.tracks.concat(playListSongs.data.items);
+      defer.resolve(volumioFormatList);
     });
   });
   return defer.promise;
@@ -70,12 +71,10 @@ function getSongsInPlaylist(curUri) {
       ]
     }
   };
-  var playListSongs = self.playListSongs;
-  for (var i in playListSongs) {
-    var track = playListSongs[i];
+  response.navigation.lists[0].items = self.tracks.reduce(function (acc, track) {
     if (track.playlistId === playListId) {
       var trackData = track.track;
-      response.navigation.lists[0].items.push({
+      acc.push({
         service: 'googleplaymusic', // plugin name
         type: 'song',
         title: trackData.title,
@@ -86,7 +85,8 @@ function getSongsInPlaylist(curUri) {
         uri: 'googleplaymusic:track:' + track.trackId,
       });
     }
-  }
+    return acc;
+  }, []);
   defer.resolve(response);
   return defer.promise;
 }
@@ -95,9 +95,9 @@ function getSongsInPlaylist(curUri) {
 function addPlaylistToQueue(playlistId) {
   var self = this;
   var songsInPlaylist = [];
-  for (var i = 0; i < self.playListSongs.length; i++) {
-    if (self.playListSongs[i].playlistId === playlistId) {
-      var track = self.playListSongs[i];
+  for (var i = 0; i < self.tracks.length; i++) {
+    if (self.tracks[i].playlistId === playlistId) {
+      var track = self.tracks[i];
       var trackId = track.trackId;
       var trackInfo = track.track;
       // TODO: make single function for getting volumio for data of a song.
@@ -205,7 +205,7 @@ function getSongsInStation(curUri) {
         trackType: 'googleplaymusic',
       });
     }
-    self.stationTracks = stationTracks; // storing to use it further when exploding uri and getting other informaiton of the song
+    self.tracks = self.tracks.concat(stationTracks); // storing to use it further when exploding uri and getting other informaiton of the song
     response.navigation.lists[0].items = stationTracks;
     defer.resolve(response);
   });
@@ -242,13 +242,46 @@ function addStationSongsToQueue(stationId) {
         trackType: 'googleplaymusic',
       });
     }
-    self.stationTracks = stationTracks; // storing to use it further when exploding uri and getting other informaiton of the song
+    self.tracks = self.tracks.concat(stationTracks); // storing to use it further when exploding uri and getting other informaiton of the song
     defer.resolve(stationTracks);
   });
   return defer.promise;
 }
 
-function searchSong(service, queryString) {
+function getAlbumTracks(service, albumId) {
+  var defer = libQ.defer();
+  service.playMusic.getAlbum(albumId, true, function (error, albumResponse) {
+    if (error) {
+      console.error('Error getting album tracks', error);
+      defer.reject('Error getting album tracks' + error);
+    } else {
+      var volumioFormatSongList = albumResponse.tracks.reduce(function (acc, track) {
+        acc.push({
+          service: 'googleplaymusic', // plugin name
+          uri: 'googleplaymusic:albumTrack:' + track.nid,
+          type: 'song',
+          trackId: track.nid, // nid works same as trackId, when we will try to get the streamurl from google.(for station songs array, google doesn't return trackId, but it does for playlist songs)
+          name: track.title,
+          title: track.title,
+          artist: track.artist,
+          album: track.album,
+          albumArtRef: track.albumArtRef,
+          albumart: track.albumArtRef[0].url,
+          samplerate: service.samplerate,
+          duration: Math.trunc(track.durationMillis / 1000),
+          bitdepth: '16 bit',
+          trackType: 'googleplaymusic',
+        });
+        return acc;
+      }, []);
+      service.tracks = service.tracks.concat(volumioFormatSongList);
+      defer.resolve(volumioFormatSongList);
+    }
+  });
+  return defer.promise;
+}
+
+function searchQuery(service, queryString) {
   var defer = libQ.defer();
   console.log('query string', queryString);
   service.playMusic.search(queryString, 10, function (error, responseSongs) { // the second parameter is for returned songs in t
@@ -330,7 +363,7 @@ function getTracksFromList(googlePlayMusic, entityArray) {
   for (var i in entityArray) {
     var entity = entityArray[i];
     if (entity.type === '1') {// for album type string is 2.
-      googlePlayMusic.searchTracks.push(entity.track);
+      googlePlayMusic.tracks.push(entity.track);
       list.push({
         service: 'googleplaymusic',
         type: 'song',
@@ -383,17 +416,23 @@ function getTracksFromList(googlePlayMusic, entityArray) {
 function getTrackInfo(uri) {
   var self = this;
   var trackId = uri.split(':').pop();
+  console.log('The uri here', uri);
+  console.log(trackId);
   var trackInfo;
   if (uri.includes('station')) {
-    trackInfo = self.stationTracks.find(function (track) {
+    trackInfo = self.tracks.find(function (track) {
       return track.trackId === trackId;
     });
   } else if (uri.includes('search:track')) {
-    trackInfo = self.searchTracks.find(function (track) {
+    trackInfo = self.tracks.find(function (track) {
       return track.storeId === trackId;
     });
+  } else if (uri.includes('album')) {
+    trackInfo = self.tracks.find(function (track) {
+      return track.trackId === trackId;
+    });
   } else {
-    var trackResult = self.playListSongs.find(function (track) {
+    var trackResult = self.tracks.find(function (track) {
       return track.trackId === trackId;
     });
     trackInfo = trackResult.track;
@@ -421,7 +460,8 @@ module.exports = {
   getStations: getStations,
   getSongsInStation: getSongsInStation,
   addStationSongsToQueue: addStationSongsToQueue,
+  getAlbumTracks: getAlbumTracks,
   // getSongsByStationId: getSongsByStationId,
   getTrackInfo: getTrackInfo,
-  searchSong: searchSong
+  searchQuery: searchQuery
 };
