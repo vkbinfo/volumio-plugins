@@ -411,9 +411,9 @@ function searchQuery(service, queryString) {
       });
       var volumioFormated = [];
       var artistList = getArtistsFromList(results);
-      var albumsList = getAlbumsFromList(results, { isAlbumList: true });
+      var albumsList = getAlbumsFromList(results, { isAlbumList: false });
       var playlist = getPlaylistsFromList(results);
-      var songList = getTracksFromList(service, results);
+      var songList = getTracksFromList(service, results, { isTrackArray: false });
       volumioFormated.push({ type: 'title', title: 'Play Music Tracks', availableListViews: ["list"], items: songList });
       volumioFormated.push({ type: 'title', title: 'Play Music Artists', availableListViews: ["list", "grid"], items: artistList });
       volumioFormated.push({ type: 'title', title: 'Play Music Albums', availableListViews: ["list", "grid"], items: albumsList });
@@ -441,6 +441,10 @@ function getArtistsFromList(entityArray) {
   return list;
 }
 
+/**
+ * @param  {} entityArray
+ * @param  {} info
+ */
 function getAlbumsFromList(entityArray, info) {
   var list = [];
   if (!info.isAlbumList) {
@@ -479,7 +483,7 @@ function getAlbumsFromList(entityArray, info) {
 }
 
 function getFormatedAlbumInfo(album) {
-  // To reder correctly on the volumio gui, we need this kind of predefined album structure.
+  // To reder correctly on the volumio gui, we need following kind of predefined album object structure.
   return {
     service: 'googleplaymusic',
     type: 'folder',
@@ -506,46 +510,75 @@ function getPlaylistsFromList(entityArray) {
   return list;
 }
 
-function getTracksFromList(googlePlayMusic, entityArray) {
+function getTracksFromList(googlePlayMusic, entityArray, info) {
   var list = [];
-  for (var i in entityArray) {
-    var entity = entityArray[i];
-    if (entity.type === '1') {// for track type string is 1.
-      googlePlayMusic.tracks.push(entity.track);
-      list.push({
-        service: 'googleplaymusic',
-        type: 'song',
-        title: entity.track.title,
-        artist: entity.track.artist,
-        album: entity.track.album,
-        albumart: entity.track.albumArtRef[0].url,
-        uri: 'googleplaymusic:search:track:' + entity.track.storeId
-      });
-    }
+  if (!info.isTrackArray) {
+    list = entityArray.reduce(function (acc, entity) {
+      if (entity.type === '1') {// for track type string is 1.
+        googlePlayMusic.tracks.push(entity.track);
+        acc.push(getFormatedTrackInfo(entity.track));
+      }
+      return acc;
+    }, []);
+  } else {
+    list = entityArray.reduce(function (acc, track) {
+      googlePlayMusic.tracks.push(track);
+      acc.push(getFormatedTrackInfo(track));
+      return acc;
+    }, []);
   }
+  // for (var i in entityArray) {
+  //   var entity = entityArray[i];
+  //   if (entity.type === '1') {// for track type string is 1.
+  //     googlePlayMusic.tracks.push(entity.track);
+  //     list.push({
+  //       service: 'googleplaymusic',
+  //       type: 'song',
+  //       title: entity.track.title,
+  //       artist: entity.track.artist,
+  //       album: entity.track.album,
+  //       albumart: entity.track.albumArtRef[0].url,
+  //       uri: 'googleplaymusic:search:track:' + entity.track.storeId
+  //     });
+  //   }
+  // }
+  // googlePlayMusic.tracks = googlePlayMusic.tracks.concat(list);
   return list;
+}
+
+function getFormatedTrackInfo(track) {
+  return {
+    service: 'googleplaymusic',
+    type: 'song',
+    title: track.title,
+    artist: track.artist,
+    album: track.album,
+    albumart: track.albumArtRef[0].url,
+    uri: 'googleplaymusic:search:track:' + track.storeId
+  };
 }
 
 function retrieveArtistData(service, artistId) {
   var defer = libQ.defer();
-  service.playMusic.getArtist(artistId, true, 25, 0, function (error, response) { // second argument about returning albums of artist,the third parameter is for returned top songs for artist
+  service.playMusic.getArtist(artistId, true, 5, 5, function (error, response) { // second argument about returning albums of artist,the third parameter is for returned top songs for artist
     if (error) {
       defer.reject(error);
     } else {
-      // console.log('response for artist api', JSON.stringify(response, undefined, 4));
+      console.log('response for artist api', JSON.stringify(response, undefined, 4));
       var volumioFormated = {
         "navigation": {
           "isSearchResult": true,
           "lists": []
         }
       };
+      var artistCollection = volumioFormated.navigation.lists;
       // var artistList = getArtistsFromList(results);
       var albumsList = getAlbumsFromList(response.albums, { isAlbumList: true });
       // var playlist = getPlaylistsFromList(results);
-      // var songList = getTracksFromList(service, results);
-      // volumioFormated.push({ type: 'title', title: 'Artist Tracks', availableListViews: ["list"], items: songList });
+      var topTrackList = getTracksFromList(service, response.topTracks, { isTrackArray: true });
+      artistCollection.push({ type: 'title', title: 'Artist Tracks', availableListViews: ["list"], items: topTrackList });
       // volumioFormated.push({ type: 'title', title: 'Play Music Artists', availableListViews: ["list", "grid"], items: artistList });
-      volumioFormated.navigation.lists.push({ type: 'title', title: 'Artist Albums', availableListViews: ["list", "grid"], items: albumsList });
+      artistCollection.push({ type: 'title', title: 'Artist Albums', availableListViews: ["list", "grid"], items: albumsList });
       // volumioFormated.push({ type: 'title', title: 'Play Music Playlists', availableListViews: ["list"], items: playlist });
       defer.resolve(volumioFormated);
     }
