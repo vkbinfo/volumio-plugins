@@ -183,7 +183,7 @@ function addPlaylistToQueue(playlistId, info) {
         var track = self.tracks[i];
         var trackId = track.trackId;
         var trackInfo = track.track;
-        // TODO: make single function for getting volumio for data of a song.
+        // TODO: make single function for getting volumio formatted data of a song.
         var volumioFormatSongData = {
           uri: trackId,
           service: 'googleplaymusic',
@@ -402,7 +402,6 @@ function getAlbumTracks(service, albumId) {
 
 function searchQuery(service, queryString) {
   var defer = libQ.defer();
-  console.log('query string', queryString);
   service.playMusic.search(queryString, 10, function (error, responseSongs) { // the second parameter is for returned songs in t
     if (error) {
       defer.reject(error);
@@ -412,7 +411,7 @@ function searchQuery(service, queryString) {
       });
       var volumioFormated = [];
       var artistList = getArtistsFromList(results);
-      var albumsList = getAlbumsFromList(results);
+      var albumsList = getAlbumsFromList(results, { isAlbumList: true });
       var playlist = getPlaylistsFromList(results);
       var songList = getTracksFromList(service, results);
       volumioFormated.push({ type: 'title', title: 'Play Music Tracks', availableListViews: ["list"], items: songList });
@@ -423,40 +422,6 @@ function searchQuery(service, queryString) {
     }
   });
   return defer.promise;
-}
-
-function getAlbumsFromList(entityArray) {
-  var list = [];
-  for (var i in entityArray) {
-    var entity = entityArray[i];
-    if (entity.type === '3') {// for album type string is 3.
-      list.push({
-        service: 'googleplaymusic',
-        type: 'folder',
-        title: entity.album.name,
-        albumart: entity.album.albumArtRef,
-        uri: 'googleplaymusic:album:' + entity.album.albumId
-      });
-    }
-  }
-  return list;
-}
-
-function getPlaylistsFromList(entityArray) {
-  var list = [];
-  for (var i in entityArray) {
-    var entity = entityArray[i];
-    if (entity.type === '4') {// for playlist type string is 4.
-      list.push({
-        service: 'googleplaymusic',
-        type: 'folder',
-        title: entity.playlist.name,
-        albumart: entity.playlist.ownerProfilePhotoUrl,
-        uri: 'googleplaymusic:shared:playlist:' + entity.playlist.shareToken
-      });
-    }
-  }
-  return list;
 }
 
 function getArtistsFromList(entityArray) {
@@ -470,6 +435,71 @@ function getArtistsFromList(entityArray) {
         title: entity.artist.name,
         albumart: entity.artist.artistArtRef,
         uri: 'googleplaymusic:artist:' + entity.artist.artistId
+      });
+    }
+  }
+  return list;
+}
+
+function getAlbumsFromList(entityArray, info) {
+  var list = [];
+  if (!info.isAlbumList) {
+    list = entityArray.reduce(function (acc, entity) {
+      if (entity.type === '3') {// for album type string is 3.
+        acc.push(getFormatedAlbumInfo(entity.album));
+      }
+      return acc;
+    }, []);
+  } else {
+    list = entityArray.reduce(function (acc, album) {
+      acc.push(getFormatedAlbumInfo(album));
+      // {
+      //   "kind": "sj#album",
+      //   "name": "7",
+      //   "albumArtist": "Beach House",
+      //   "albumArtRef": "http://lh3.googleusercontent.com/lTFT1RfhSsC2RG_wJoPKhs2AdRBHyfryVLAwAIFRysxnkM4vOj93-23deMFI_QfpMAL6AEs-",
+      //   "albumId": "B7ae2tkhu6f6qddwjl3f3ms2u3y",
+      //   "artist": "Beach House",
+      //   "artistId": [
+      //   "Ajsyy36ejz77nwll5vpgey4m5ca"
+      //   ],
+      //   "description_attribution": {
+      //   "kind": "sj#attribution",
+      //   "source_title": "Wikipedia",
+      //   "source_url": "https://en.wikipedia.org/wiki/7_(Beach_House_album)",
+      //   "license_title": "Creative Commons Attribution CC-BY-SA 4.0",
+      //   "license_url": "http://creativecommons.org/licenses/by-sa/4.0/legalcode"
+      //   },
+      //   "year": 2018
+      //   },
+      return acc;
+    }, []);
+  }
+  return list;
+}
+
+function getFormatedAlbumInfo(album) {
+  // To reder correctly on the volumio gui, we need this kind of predefined album structure.
+  return {
+    service: 'googleplaymusic',
+    type: 'folder',
+    title: album.name,
+    albumart: album.albumArtRef,
+    uri: 'googleplaymusic:album:' + album.albumId
+  };
+}
+
+function getPlaylistsFromList(entityArray) {
+  var list = [];
+  for (var i in entityArray) {
+    var entity = entityArray[i];
+    if (entity.type === '4') {// for playlist type string is 4.
+      list.push({
+        service: 'googleplaymusic',
+        type: 'folder',
+        title: entity.playlist.name,
+        albumart: entity.playlist.ownerProfilePhotoUrl,
+        uri: 'googleplaymusic:shared:playlist:' + entity.playlist.shareToken
       });
     }
   }
@@ -494,6 +524,33 @@ function getTracksFromList(googlePlayMusic, entityArray) {
     }
   }
   return list;
+}
+
+function retrieveArtistData(service, artistId) {
+  var defer = libQ.defer();
+  service.playMusic.getArtist(artistId, true, 25, 0, function (error, response) { // second argument about returning albums of artist,the third parameter is for returned top songs for artist
+    if (error) {
+      defer.reject(error);
+    } else {
+      // console.log('response for artist api', JSON.stringify(response, undefined, 4));
+      var volumioFormated = {
+        "navigation": {
+          "isSearchResult": true,
+          "lists": []
+        }
+      };
+      // var artistList = getArtistsFromList(results);
+      var albumsList = getAlbumsFromList(response.albums, { isAlbumList: true });
+      // var playlist = getPlaylistsFromList(results);
+      // var songList = getTracksFromList(service, results);
+      // volumioFormated.push({ type: 'title', title: 'Artist Tracks', availableListViews: ["list"], items: songList });
+      // volumioFormated.push({ type: 'title', title: 'Play Music Artists', availableListViews: ["list", "grid"], items: artistList });
+      volumioFormated.navigation.lists.push({ type: 'title', title: 'Artist Albums', availableListViews: ["list", "grid"], items: albumsList });
+      // volumioFormated.push({ type: 'title', title: 'Play Music Playlists', availableListViews: ["list"], items: playlist });
+      defer.resolve(volumioFormated);
+    }
+  });
+  return defer.promise;
 }
 // TODO: Remove follow commented code in refactor, if it is not been used yet.
 // function getSongsByStationId(stationId) {
@@ -582,5 +639,6 @@ module.exports = {
   getAlbumTracks: getAlbumTracks,
   // getSongsByStationId: getSongsByStationId,
   getTrackInfo: getTrackInfo,
-  searchQuery: searchQuery
+  searchQuery: searchQuery,
+  retrieveArtistData: retrieveArtistData,
 };

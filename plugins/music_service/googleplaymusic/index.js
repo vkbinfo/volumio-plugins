@@ -187,6 +187,8 @@ googleplaymusic.prototype.handleBrowseUri = function (curUri) {
     listItemsToRender = self.featuredPlaylists(curUri);
   } else if (curUri.startsWith("googleplaymusic:album")) {
     listItemsToRender = self.renderAlbumTracks(curUri);
+  } else if (curUri.startsWith("googleplaymusic:artist:")) {
+    listItemsToRender = self.getArtistData(curUri);
   } else if (curUri.startsWith("googleplaymusic:user:")) {
     listItemsToRender = self.listWebPlaylist(curUri);
   } else if (curUri.startsWith("googleplaymusic/new")) {
@@ -195,8 +197,6 @@ googleplaymusic.prototype.handleBrowseUri = function (curUri) {
     listItemsToRender = self.listWebCategories(curUri);
   } else if (curUri.startsWith("googleplaymusic/category")) {
     listItemsToRender = self.listWebCategory(curUri);
-  } else if (curUri.startsWith("googleplaymusic:artist:")) {
-    listItemsToRender = self.listWebArtist(curUri);
   }
   return listItemsToRender;
 };
@@ -235,6 +235,19 @@ googleplaymusic.prototype.renderAlbumTracks = function (curUri) {
     .fail(function (error) {
       defer.reject(response);
     });
+  return defer.promise;
+};
+
+googleplaymusic.prototype.getArtistData = function (curUri) {
+  var self = this;
+  var artistId = curUri.split(':').pop();
+  var defer = libQ.defer();
+  playMusicCore.retrieveArtistData(self, artistId).then(function (categoryData) {
+    defer.resolve(categoryData);
+  }).fail(function (error) {
+    console.error('Error getting song based on search query from Google Play Music Server.', error);
+    defer.reject(error);
+  });
   return defer.promise;
 };
 
@@ -433,7 +446,6 @@ googleplaymusic.prototype.getAlbumArt = function (data, path) {
 
 googleplaymusic.prototype.search = function (query) {
   var self = this;
-  var queryMatchedSongs = [];
   var defer = libQ.defer();
   playMusicCore.searchQuery(self, query.value).then(function (categoryData) {
     defer.resolve(categoryData);
