@@ -165,6 +165,7 @@ googleplaymusic.prototype.addToBrowseSources = function () {
 googleplaymusic.prototype.handleBrowseUri = function (curUri) {
   var self = this;
   var listItemsToRender;
+  console.log('To be handle uri', curUri);
   if (curUri == "googleplaymusic") {
     // get's first time options, when we click on the google play music in the browse section.
     listItemsToRender = libQ.resolve(PLAY_MUSIC_CONSTANTS.availableFeatures);
@@ -172,8 +173,10 @@ googleplaymusic.prototype.handleBrowseUri = function (curUri) {
     if (curUri == "googleplaymusic/playlists") {
       listItemsToRender = self.getPlaylists(self);
     } else {
-      listItemsToRender = self.getSongsInPlaylist(curUri);
+      listItemsToRender = self.getSongsInPlaylist(curUri, { shared: false });
     }
+  } else if (curUri.includes('googleplaymusic:shared:playlist:')) {
+    listItemsToRender = self.getSongsInPlaylist(curUri, { shared: true });
   } else if (curUri.startsWith("googleplaymusic/stations")) {
     if (curUri == "googleplaymusic/stations") {
       listItemsToRender = self.getStations();
@@ -334,6 +337,7 @@ googleplaymusic.prototype.pushState = function (state) {
 };
 
 googleplaymusic.prototype.explodeUri = function (uri) {
+  console.log('To be explode uri', uri);
   var self = this;
   var defer = libQ.defer();
   var response = [];

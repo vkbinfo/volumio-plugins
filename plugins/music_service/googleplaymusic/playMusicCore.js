@@ -53,7 +53,7 @@ function getPlaylists(service) {
   return defer.promise;
 }
 
-function getSongsInPlaylist(curUri) {
+function getSongsInPlaylist(curUri, info) {
   // curUri format:-  googleplaymusic/playlists/e757c0eb-2391-4f9b-a75a-f214476e94b4
   var self = this;
   var defer = libQ.defer();
@@ -71,23 +71,104 @@ function getSongsInPlaylist(curUri) {
       ]
     }
   };
-  response.navigation.lists[0].items = self.tracks.reduce(function (acc, track) {
-    if (track.playlistId === playListId) {
-      var trackData = track.track;
-      acc.push({
-        service: 'googleplaymusic', // plugin name
-        type: 'song',
-        title: trackData.title,
-        artist: trackData.artist,
-        album: trackData.album,
-        albumart: trackData.albumArtRef[0].url,
-        icon: 'fas fa-play',
-        uri: 'googleplaymusic:track:' + track.trackId,
-      });
+  if (!info.shared) {
+    response.navigation.lists[0].items = self.tracks.reduce(function (acc, track) {
+      if (track.playlistId === playListId) {
+        var trackData = track.track;
+        acc.push({
+          service: 'googleplaymusic', // plugin name
+          type: 'song',
+          title: trackData.title,
+          artist: trackData.artist,
+          album: trackData.album,
+          albumart: trackData.albumArtRef[0].url,
+          icon: 'fas fa-play',
+          uri: 'googleplaymusic:track:' + track.trackId,
+        });
+      }
+      return acc;
+    }, []);
+    defer.resolve(response);
+    return defer.promise;
+  }
+  var sharedPlayListId = curUri.split(':').pop();
+  var options = {
+    limit: 50, // Total songs that will be returned for this playlist 
+    shareToken: sharedPlayListId
+  };
+  self.playMusic.getSharedPlayListEntries(options, function (error, responseData) {
+    if (error) {
+      console.error('Error getting shared playlist songs: ', error);
+      defer.reject('Error getting shared playlist songs: ' + error);
+    } else {
+      var tracks = responseData.entries[0].playlistEntry;
+      var sharedPlaylistSongs = tracks.reduce(function (acc, track) {
+        /**
+         * {
+ "kind": "sj#playlistEntry",
+ "id": "AMaBXynWDffCvaCF27hRWoPE1-9PPm0pw2PfhTl9pkFRzqaN0LOScEQvKSSDJ60UmAHGTMY8p_I_Oa7mdWCDvuT1YO97yxwChw==",
+ "absolutePosition": "02161727821137838077",
+ "trackId": "T6akq2kkkgvvwbxcg224ifsp3uu",
+ "creationTimestamp": "1527223719365394",
+ "lastModifiedTimestamp": "1527223719365394",
+ "deleted": false,
+ "source": "2",
+ "track": {
+ "kind": "sj#track",
+ "title": "Bittersweet (Original Mix)",
+ "artist": "baaskaT",
+ "composer": "",
+ "album": "Flickshots & Quickscopes",
+ "albumArtist": "baaskaT",
+ "year": 2016,
+ "trackNumber": 1,
+ "durationMillis": "86000",
+ "albumArtRef": [
+ {
+ "url": "http://lh3.googleusercontent.com/R1Dk0U-1U3V9PshW3He_E75ZKE-nkCHJLFIEVIb_kvZRQLcBdCNStwzocFMslQ2JCyNw2FIxww"
+ }
+ ],
+ "artistArtRef": [
+ {
+ "url": "http://lh3.googleusercontent.com/J-QG-wJ_ndC-uS7amxJnoIjI5iDHgAyL4NxbX4tE7S6O8OBIbqtehbwOGsyqcAMC12wqmh-2"
+ },
+ {
+ "url": "http://lh3.googleusercontent.com/R1Dk0U-1U3V9PshW3He_E75ZKE-nkCHJLFIEVIb_kvZRQLcBdCNStwzocFMslQ2JCyNw2FIxww"
+ }
+ ],
+ "discNumber": 1,
+ "estimatedSize": "3442975",
+ "trackType": "7",
+ "storeId": "T6akq2kkkgvvwbxcg224ifsp3uu",
+ "albumId": "Bu7fytmr3nraowhbdqtjhqgjxmm",
+ "artistId": [
+ "Amwvyjcblitxufznqpiccuaz5zy"
+ ],
+ "nid": "6akq2kkkgvvwbxcg224ifsp3uu",
+ "trackAvailableForSubscription": true,
+ "trackAvailableForPurchase": true,
+ "albumAvailableForPurchase": false,
+ "contentType": "2"
+ }
+ },
+         */
+        var trackData = track.track;
+        acc.push({
+          service: 'googleplaymusic', // plugin name
+          type: 'song',
+          title: trackData.title,
+          artist: trackData.artist,
+          album: trackData.album,
+          albumart: trackData.albumArtRef[0].url,
+          uri: 'googleplaymusic:track:' + track.trackId,
+        });
+        return acc;
+      }, []);
+      self.tracks = self.tracks.concat(tracks);// having a reference of playlist songs for future use.
+      response.navigation.lists[0].items = sharedPlaylistSongs;
+      defer.resolve(response);
     }
-    return acc;
-  }, []);
-  defer.resolve(response);
+  });
   return defer.promise;
 }
 
@@ -327,14 +408,13 @@ function getPlaylistsFromList(entityArray) {
   var list = [];
   for (var i in entityArray) {
     var entity = entityArray[i];
-    if (entity.type === '4') {// for album type string is 4.
+    if (entity.type === '4') {// for playlist type string is 4.
       list.push({
         service: 'googleplaymusic',
         type: 'folder',
         title: entity.playlist.name,
         albumart: entity.playlist.ownerProfilePhotoUrl,
-        // TODO: check it uri will work with shareToken or not.
-        uri: 'googleplaymusic:playlist:' + entity.playlist.shareToken
+        uri: 'googleplaymusic:shared:playlist:' + entity.playlist.shareToken
       });
     }
   }
@@ -345,13 +425,13 @@ function getArtistsFromList(entityArray) {
   var list = [];
   for (var i in entityArray) {
     var entity = entityArray[i];
-    if (entity.type === '2') {// for album type string is 2.
+    if (entity.type === '2') {// for artist type string is 2.
       list.push({
         service: 'googleplaymusic',
         type: 'folder',
         title: entity.artist.name,
         albumart: entity.artist.artistArtRef,
-        uri: 'googleplaymusic:artist:' + entity.artist.shareToken
+        uri: 'googleplaymusic:artist:' + entity.artist.artistId
       });
     }
   }
@@ -362,7 +442,7 @@ function getTracksFromList(googlePlayMusic, entityArray) {
   var list = [];
   for (var i in entityArray) {
     var entity = entityArray[i];
-    if (entity.type === '1') {// for album type string is 2.
+    if (entity.type === '1') {// for track type string is 1.
       googlePlayMusic.tracks.push(entity.track);
       list.push({
         service: 'googleplaymusic',
@@ -370,13 +450,14 @@ function getTracksFromList(googlePlayMusic, entityArray) {
         title: entity.track.title,
         artist: entity.track.artist,
         album: entity.track.album,
-        albumart: entity.track.artistArtRef,
+        albumart: entity.track.albumArtRef[0].url,
         uri: 'googleplaymusic:search:track:' + entity.track.storeId
       });
     }
   }
   return list;
 }
+// TODO: Remove follow commented code in refactor, if it is not been used yet.
 // function getSongsByStationId(stationId) {
 //   var self = this;
 //   var defer = libQ.defer();
