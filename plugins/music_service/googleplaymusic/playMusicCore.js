@@ -410,7 +410,7 @@ function searchQuery(service, queryString) {
         return resultA.score < resultB.score;
       });
       var volumioFormated = [];
-      var artistList = getArtistsFromList(results);
+      var artistList = getArtistsFromList(results, { isArtistList: false });
       var albumsList = getAlbumsFromList(results, { isAlbumList: false });
       var playlist = getPlaylistsFromList(results);
       var songList = getTracksFromList(service, results, { isTrackArray: false });
@@ -424,21 +424,32 @@ function searchQuery(service, queryString) {
   return defer.promise;
 }
 
-function getArtistsFromList(entityArray) {
+function getArtistsFromList(entityArray, info) {
   var list = [];
-  for (var i in entityArray) {
-    var entity = entityArray[i];
-    if (entity.type === '2') {// for artist type string is 2.
-      list.push({
-        service: 'googleplaymusic',
-        type: 'folder',
-        title: entity.artist.name,
-        albumart: entity.artist.artistArtRef,
-        uri: 'googleplaymusic:artist:' + entity.artist.artistId
-      });
-    }
+  if (!info.isArtistList) {
+    list = entityArray.reduce(function (acc, entity) {
+      if (entity.type === '2') {// for artist type string is 2.
+        acc.push(getFormatedArtistInfo(entity.artist));
+      }
+      return acc;
+    }, []);
+  } else {
+    list = entityArray.reduce(function (acc, artist) {
+      acc.push(getFormatedArtistInfo(artist));
+      return acc;
+    }, []);
   }
   return list;
+}
+
+function getFormatedArtistInfo(artist) {
+  return {
+    service: 'googleplaymusic',
+    type: 'folder',
+    title: artist.name,
+    albumart: artist.artistArtRef,
+    uri: 'googleplaymusic:artist:' + artist.artistId
+  };
 }
 
 /**
@@ -560,7 +571,7 @@ function getFormatedTrackInfo(track) {
 
 function retrieveArtistData(service, artistId) {
   var defer = libQ.defer();
-  service.playMusic.getArtist(artistId, true, 5, 5, function (error, response) { // second argument about returning albums of artist,the third parameter is for returned top songs for artist
+  service.playMusic.getArtist(artistId, true, 20, 5, function (error, response) { // second argument about returning albums of artist,the third parameter is for returned top songs for artist
     if (error) {
       defer.reject(error);
     } else {
@@ -572,14 +583,12 @@ function retrieveArtistData(service, artistId) {
         }
       };
       var artistCollection = volumioFormated.navigation.lists;
-      // var artistList = getArtistsFromList(results);
+      var artistList = getArtistsFromList(response.related_artists, { isArtistList: true });
       var albumsList = getAlbumsFromList(response.albums, { isAlbumList: true });
-      // var playlist = getPlaylistsFromList(results);
       var topTrackList = getTracksFromList(service, response.topTracks, { isTrackArray: true });
       artistCollection.push({ type: 'title', title: 'Artist Tracks', availableListViews: ["list"], items: topTrackList });
-      // volumioFormated.push({ type: 'title', title: 'Play Music Artists', availableListViews: ["list", "grid"], items: artistList });
+      artistCollection.push({ type: 'title', title: 'Related Artists', availableListViews: ["list", "grid"], items: artistList });
       artistCollection.push({ type: 'title', title: 'Artist Albums', availableListViews: ["list", "grid"], items: albumsList });
-      // volumioFormated.push({ type: 'title', title: 'Play Music Playlists', availableListViews: ["list"], items: playlist });
       defer.resolve(volumioFormated);
     }
   });
