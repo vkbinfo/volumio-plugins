@@ -173,33 +173,71 @@ function getSongsInPlaylist(curUri, info) {
 }
 
 
-function addPlaylistToQueue(playlistId) {
+function addPlaylistToQueue(playlistId, info) {
   var self = this;
+  var defer = libQ.defer();
   var songsInPlaylist = [];
-  for (var i = 0; i < self.tracks.length; i++) {
-    if (self.tracks[i].playlistId === playlistId) {
-      var track = self.tracks[i];
-      var trackId = track.trackId;
-      var trackInfo = track.track;
-      // TODO: make single function for getting volumio for data of a song.
-      var volumioFormatSongData = {
-        uri: trackId,
-        service: 'googleplaymusic',
-        type: 'song',
-        name: trackInfo.title,
-        title: trackInfo.title,
-        artist: trackInfo.artist,
-        album: trackInfo.album,
-        duration: Math.trunc(trackInfo.durationMillis / 1000),
-        albumart: trackInfo.albumArtRef[0].url,
-        samplerate: self.samplerate,
-        bitdepth: '16 bit',
-        trackType: 'googleplaymusic'
-      };
-      songsInPlaylist.push(volumioFormatSongData);
+  if (!info.shared) {
+    for (var i = 0; i < self.tracks.length; i++) {
+      if (self.tracks[i].playlistId === playlistId) {
+        var track = self.tracks[i];
+        var trackId = track.trackId;
+        var trackInfo = track.track;
+        // TODO: make single function for getting volumio for data of a song.
+        var volumioFormatSongData = {
+          uri: trackId,
+          service: 'googleplaymusic',
+          type: 'song',
+          name: trackInfo.title,
+          title: trackInfo.title,
+          artist: trackInfo.artist,
+          album: trackInfo.album,
+          duration: Math.trunc(trackInfo.durationMillis / 1000),
+          albumart: trackInfo.albumArtRef[0].url,
+          samplerate: self.samplerate,
+          bitdepth: '16 bit',
+          trackType: 'googleplaymusic'
+        };
+        songsInPlaylist.push(volumioFormatSongData);
+      }
     }
+    defer.resolve(songsInPlaylist);
+  } else {
+    var sharedPlayListId = playlistId;
+    var options = {
+      limit: 50, // Total songs that will be returned for this playlist 
+      shareToken: sharedPlayListId
+    };
+    self.playMusic.getSharedPlayListEntries(options, function (error, responseData) {
+      if (error) {
+        console.error('Error getting shared playlist songs: ', error);
+        defer.reject('Error getting shared playlist songs: ' + error);
+      } else {
+        var tracks = responseData.entries[0].playlistEntry;
+        var sharedPlaylistSongs = tracks.reduce(function (acc, track) {
+          var trackData = track.track;
+          acc.push({
+            uri: track.trackId,
+            service: 'googleplaymusic',
+            type: 'song',
+            name: trackData.title,
+            title: trackData.title,
+            artist: trackData.artist,
+            album: trackData.album,
+            duration: Math.trunc(trackData.durationMillis / 1000),
+            albumart: trackData.albumArtRef[0].url,
+            samplerate: self.samplerate,
+            bitdepth: '16 bit',
+            trackType: 'googleplaymusic'
+          });
+          return acc;
+        }, []);
+        self.tracks = self.tracks.concat(tracks);// having a reference of playlist songs for future use.
+        defer.resolve(sharedPlaylistSongs);
+      }
+    });
   }
-  return songsInPlaylist;
+  return defer.promise;
 }
 
 function getStations() {
@@ -380,7 +418,7 @@ function searchQuery(service, queryString) {
       volumioFormated.push({ type: 'title', title: 'Play Music Tracks', availableListViews: ["list"], items: songList });
       volumioFormated.push({ type: 'title', title: 'Play Music Artists', availableListViews: ["list", "grid"], items: artistList });
       volumioFormated.push({ type: 'title', title: 'Play Music Albums', availableListViews: ["list", "grid"], items: albumsList });
-      volumioFormated.push({ type: 'title', title: 'Play Music Playlists', availableListViews: ["list", "grid"], items: playlist });
+      volumioFormated.push({ type: 'title', title: 'Play Music Playlists', availableListViews: ["list"], items: playlist });
       defer.resolve(volumioFormated);
     }
   });

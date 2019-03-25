@@ -345,8 +345,27 @@ googleplaymusic.prototype.explodeUri = function (uri) {
   // Mandatory: retrieve all info for a given URI
   if (uri.includes('playlist')) {
     self.logger.info("googleplaymusic::explodeUri Playlist: " + uri);
-    var playlistId = uri.split('/').pop();
-    response = self.addPlaylistToQueue(playlistId); // getting playlist's songs from already stored songs(self.playListSongs) data.
+    if (uri.includes('shared')) {
+      var sharedPlaylistId = uri.split(':').pop();
+      response = self.addPlaylistToQueue(sharedPlaylistId, { shared: true })
+        .then(function (tracks) {
+          defer.resolve(tracks);
+        })
+        .fail(function (error) {
+          defer.reject(error);
+        });
+      return defer.promise;
+    } else {
+      var playlistId = uri.split('/').pop();
+      response = self.addPlaylistToQueue(playlistId, { shared: false })
+        .then(function (tracks) {
+          defer.resolve(tracks);
+        })
+        .fail(function (error) {
+          defer.reject(error);
+        });
+      return defer.promise;
+    }
   } else if (uri.includes('station')) {
     if (uri.includes('googleplaymusic:station:track')) {
       trackData = self.getTrackInfo(uri);
