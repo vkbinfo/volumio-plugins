@@ -4,6 +4,8 @@
 "use strict";
 var libQ = require("kew");
 
+var PLAY_MUSIC_CONSTANTS = require('./playMusicConstants');
+
 function getPlaylists(service) {
   var self = this;
   var defer = libQ.defer();
@@ -17,19 +19,8 @@ function getPlaylists(service) {
       );
     }
     var playLists = response.data.items;
-    var volumioFormatList = {
-      navigation: {
-        prev: {
-          uri: "googleplaymusic"
-        },
-        lists: [
-          {
-            availableListViews: ["list"],
-            items: []
-          }
-        ]
-      }
-    };
+    var volumioFormatList = JSON.parse(JSON.stringify(PLAY_MUSIC_CONSTANTS.trackObjectStructure));
+    volumioFormatList.navigation.prev.uri = "googleplaymusic";
     var playListAccumulator = volumioFormatList.navigation.lists[0].items;
     for (var i = 0; i < playLists.length; i++) {
       var formatedPlaylistData = {
@@ -58,19 +49,8 @@ function getSongsInPlaylist(curUri, info) {
   var self = this;
   var defer = libQ.defer();
   var playListId = curUri.split('/').pop();
-  var response = {
-    navigation: {
-      prev: {
-        uri: curUri
-      },
-      "lists": [
-        {
-          "availableListViews": ["list"],
-          "items": []
-        }
-      ]
-    }
-  };
+  var response = JSON.parse(JSON.stringify(PLAY_MUSIC_CONSTANTS.trackObjectStructure));
+  response.navigation.prev.uri = curUri;
   if (!info.shared) {
     response.navigation.lists[0].items = self.tracks.reduce(function (acc, track) {
       if (track.playlistId === playListId) {
@@ -495,7 +475,6 @@ function retrieveArtistData(service, artistId) {
       if (error) {
         defer.reject(error);
       } else {
-        console.log('response for artist api', JSON.stringify(response, undefined, 4));
         var volumioFormated = {
           "navigation": {
             "isSearchResult": true,

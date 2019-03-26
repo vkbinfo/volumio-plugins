@@ -147,24 +147,16 @@ googleplaymusic.prototype.setConf = function (varName, varValue) {
 // If your plugin is not a music_sevice don't use this part and delete it
 
 googleplaymusic.prototype.addToBrowseSources = function () {
-  // Use this function to add your music service plugin to music sources
   var self = this;
-  var data = {
-    name: "Google Play Music",
-    uri: "googleplaymusic",
-    plugin_type: "music_service",
-    plugin_name: "googleplaymusic"
-  };
+  var data = PLAY_MUSIC_CONSTANTS.playMusicBrowseWindowOptions;
   self.commandRouter.volumioAddToBrowseSources(data);
 };
 
 googleplaymusic.prototype.handleBrowseUri = function (curUri) {
   var self = this;
   var listItemsToRender;
-  console.log('To be handle uri', curUri);
   if (curUri == "googleplaymusic") {
-    // get's first time options, when we click on the google play music in the browse section.
-    listItemsToRender = libQ.resolve(PLAY_MUSIC_CONSTANTS.availableFeatures);
+    listItemsToRender = libQ.resolve(PLAY_MUSIC_CONSTANTS.availableFeatures); // get's first time options, when we click on the google play music in the browse section.
   } else if (curUri.startsWith("googleplaymusic/playlists")) {
     if (curUri == "googleplaymusic/playlists") {
       listItemsToRender = self.getPlaylists(self);
@@ -202,19 +194,8 @@ googleplaymusic.prototype.renderAlbumTracks = function (curUri) {
   var self = this;
   var defer = libQ.defer();
   var albumId = curUri.split(':').pop();
-  var response = {
-    navigation: {
-      prev: {
-        uri: curUri
-      },
-      "lists": [
-        {
-          "availableListViews": ["list"],
-          "items": []
-        }
-      ]
-    }
-  };
+  var response = PLAY_MUSIC_CONSTANTS.trackObjectStructure;
+  response.navigation.prev.uri = curUri; // setting previous uri for navigation
   self.getAlbumTracks(self, albumId)
     .then(function (tracks) {
       response.navigation.lists[0].items = tracks;
@@ -288,8 +269,31 @@ googleplaymusic.prototype.clearAddPlayTrack = function (track) {
 googleplaymusic.prototype.seek = function (timepos) {
   var consoleMessage = "googleplaymusic::seek to " + timepos;
   this.pushConsoleMessage(consoleMessage);
-  // return this.sendSpopCommand("seek " + timepos, []);
+  return this.mpdPlugin.seek(timepos);
 };
+
+googleplaymusic.prototype.next = function () {
+  this.pushConsoleMessage('googleplaymusic::next');
+  var self = this;
+  return self.mpdPlugin.sendMpdCommand('next', []).then(function () {
+    return self.mpdPlugin.getState().then(function (state) {
+      state.trackType = "googleplaymusic Track";
+      return self.commandRouter.stateMachine.syncState(state, "googleplaymusic");
+    });
+  });
+};
+
+googleplaymusic.prototype.previous = function () {
+  this.pushConsoleMessage('googleplaymusic::previous');
+  var self = this;
+  return self.mpdPlugin.sendMpdCommand('previous', []).then(function () {
+    return self.mpdPlugin.getState().then(function (state) {
+      state.trackType = "googleplaymusic Track";
+      return self.commandRouter.stateMachine.syncState(state, "googleplaymusic");
+    });
+  });
+};
+
 
 // Stop
 googleplaymusic.prototype.stop = function () {
@@ -325,39 +329,30 @@ googleplaymusic.prototype.pushConsoleMessage = function (message) {
 googleplaymusic.prototype.explodeUri = function (uri) {
   var self = this;
   var defer = libQ.defer();
-  var response = [];
-  var trackData;
+  var returnPromiseObject;
   if (uri.includes('playlist')) {
-    return self.handlePlaylistUri(uri);
+    returnPromiseObject = self.handlePlaylistUri(uri);
   } else if (uri.includes('station')) {
-    if (uri.includes('googleplaymusic:station:track')) {
-      trackData = self.getTrackInfo(uri);
-      response.push(trackData);
-    } else {
-      self.logger.info("googleplaymusic::explodeUri Station: " + uri);
-      // getting songs for a particular station to add in queue.
-      var stationId = uri.split('/').pop();
-      return self.addStationSongsToQueue(stationId); // returns a promise don't need to create something on the defer vaiable.
-    }
+    returnPromiseObject = self.handleStationUri(uri);
   } else if (uri.startsWith('googleplaymusic:album:')) {
     var albumId = uri.split(':').pop();
-    return self.getAlbumTracks(self, albumId);
+    returnPromiseObject = self.getAlbumTracks(self, albumId);
   } else {
-    trackData = self.getTrackInfo(uri);
-    response.push(trackData);
+    var trackData = self.getTrackInfo(uri);
+    var response = [trackData];
+    defer.resolve(response);
+    returnPromiseObject = defer.promise;
   }
-  defer.resolve(response);
-  return defer.promise;
+  return returnPromiseObject;
 };
 
 googleplaymusic.prototype.handlePlaylistUri = function (uri) {
   var self = this;
-  var response = [];
   var defer = libQ.defer();
   self.logger.info("googleplaymusic::explodeUri Playlist: " + uri);
   if (uri.includes('shared')) {
     var sharedPlaylistId = uri.split(':').pop();
-    response = self.addPlaylistToQueue(sharedPlaylistId, { shared: true })
+    self.addPlaylistToQueue(sharedPlaylistId, { shared: true })
       .then(function (tracks) {
         defer.resolve(tracks);
       })
@@ -366,7 +361,7 @@ googleplaymusic.prototype.handlePlaylistUri = function (uri) {
       });
   } else {
     var playlistId = uri.split('/').pop();
-    response = self.addPlaylistToQueue(playlistId, { shared: false })
+    self.addPlaylistToQueue(playlistId, { shared: false })
       .then(function (tracks) {
         defer.resolve(tracks);
       })
@@ -375,6 +370,22 @@ googleplaymusic.prototype.handlePlaylistUri = function (uri) {
       });
   }
   return defer.promise;
+};
+
+googleplaymusic.prototype.handleStationUri = function (uri) {
+  var self = this;
+  var trackData;
+  var defer = libQ.defer();
+  if (uri.includes('googleplaymusic:station:track')) {
+    trackData = self.getTrackInfo(uri);
+    var response = [trackData];
+    defer.resolve(response);
+    return defer.promise;
+  } else {
+    self.logger.info("googleplaymusic::explodeUri Station: " + uri);
+    var stationId = uri.split('/').pop();
+    return self.addStationSongsToQueue(stationId);
+  }
 };
 
 googleplaymusic.prototype.addPlaylistToQueue = playMusicCore.addPlaylistToQueue;
@@ -394,14 +405,11 @@ googleplaymusic.prototype.getAlbumArt = function (data, path) {
   }
 
   var web;
-
   if (data != undefined && data.artist != undefined) {
     artist = data.artist;
     if (data.album != undefined) album = data.album;
     else album = data.artist;
-
-    web =
-      "?web=" +
+    web = "?web=" +
       nodetools.urlEncode(artist) +
       "/" +
       nodetools.urlEncode(album) +
@@ -409,14 +417,10 @@ googleplaymusic.prototype.getAlbumArt = function (data, path) {
   }
 
   var url = "/albumart";
-
   if (web != undefined) url = url + web;
-
   if (web != undefined && path != undefined) url = url + "&";
   else if (path != undefined) url = url + "?";
-
   if (path != undefined) url = url + "path=" + nodetools.urlEncode(path);
-
   return url;
 };
 
@@ -443,8 +447,6 @@ googleplaymusic.prototype._searchTracks = function (results) { };
 googleplaymusic.prototype.goto = function (data) {
   var self = this;
   var defer = libQ.defer();
-
   // Handle go to artist and go to album function
-
   return defer.promise;
 };
