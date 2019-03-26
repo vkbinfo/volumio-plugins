@@ -6,10 +6,12 @@ var exec = require("child_process").exec;
 var execSync = require("child_process").execSync;
 var PLAY_MUSIC = require("playmusic");
 
-var PLAY_MUSIC_CONSTANTS = require('./playMusicConstants');
-var playMusicCore = require('./playMusicCore');
+var PLAY_MUSIC_CONSTANTS = require('./playMusic/playMusicConstants');
 var uriHandler = require('./uriHandler');
-var musicUtility = require('./musicUtility');
+var playMusicCore = require('./playMusic/playMusicCore');
+var playMusicSearch = require('./playMusic/playMusicSearch');
+var playMusicUtility = require('./playMusic/playMusicUtility');
+var playActions = require('./playMusic/playActions');
 
 module.exports = googleplaymusic;
 function googleplaymusic(context) {
@@ -41,7 +43,6 @@ googleplaymusic.prototype.onVolumioStart = function () {
 googleplaymusic.prototype.onStart = function () {
   var self = this;
   var defer = libQ.defer();
-  // Once the Plugin has successfull started resolve the promise
   self.mpdPlugin = self.commandRouter.pluginManager.getPlugin('music_service', 'mpd');
   self.addToBrowseSources();
   var masterToken = self.config.get("masterToken");
@@ -126,37 +127,27 @@ googleplaymusic.prototype.saveGoogleAccount = playMusicCore.saveGoogleAccount;
 
 googleplaymusic.prototype.handleBrowseUri = uriHandler.handleBrowseUri;
 
-googleplaymusic.prototype.getPlaylists = playMusicCore.getPlaylists;
-
-googleplaymusic.prototype.getSongsInPlaylist = playMusicCore.getSongsInPlaylist;
-
-googleplaymusic.prototype.getStations = playMusicCore.getStations;
-
-googleplaymusic.prototype.getSongsInStation = playMusicCore.getSongsInStation;
-
 // Exploding uri for further music action like returning playlist songs to add into queue.
 googleplaymusic.prototype.explodeUri = uriHandler.explodeUri;
 
-googleplaymusic.prototype.addPlaylistToQueue = playMusicCore.addPlaylistToQueue;
-
-googleplaymusic.prototype.addStationSongsToQueue = playMusicCore.addStationSongsToQueue;
-
-googleplaymusic.prototype.getAlbumTracks = playMusicCore.getAlbumTracks;
-
-googleplaymusic.prototype.getTrackInfo = playMusicCore.getTrackInfo;
 
 googleplaymusic.prototype.renderAlbumTracks = function (curUri) {
   var self = this;
   var defer = libQ.defer();
   var albumId = curUri.split(':').pop();
-  var response = PLAY_MUSIC_CONSTANTS.trackObjectStructure;
+  var response = PLAY_MUSIC_CONSTANTS.volumioExpectedObjectStructure;
   response.navigation.prev.uri = curUri; // setting previous uri for navigation
-  self.getAlbumTracks(self, albumId)
+  playMusicCore.getAlbumTracks(self, albumId)
     .then(function (tracks) {
       response.navigation.lists[0].items = tracks;
       defer.resolve(response);
     })
     .fail(function (error) {
+      self.commandRouter.pushToastMessage(
+        "error",
+        "Error Getting Album Tracks",
+        error
+      );
       defer.reject(response);
     });
   return defer.promise;
@@ -166,9 +157,14 @@ googleplaymusic.prototype.getArtistData = function (curUri) {
   var self = this;
   var artistId = curUri.split(':').pop();
   var defer = libQ.defer();
-  playMusicCore.retrieveArtistData(self, artistId).then(function (categoryData) {
+  playMusicSearch.getArtistData(self, artistId).then(function (categoryData) {
     defer.resolve(categoryData);
   }).fail(function (error) {
+    self.commandRouter.pushToastMessage(
+      "error",
+      "Error Getting Artist data",
+      error
+    );
     console.error('Error getting song based on search query from Google Play Music Server.', error);
     defer.reject(error);
   });
@@ -178,100 +174,78 @@ googleplaymusic.prototype.getArtistData = function (curUri) {
 
 googleplaymusic.prototype.clearAddPlayTrack = function (track) {
   var self = this;
-  var streamUrl = '';
   var defer = libQ.defer();
   var storeId = track.uri.split(':').pop();
   self.playMusic.getStreamUrl(storeId, function (error, stream) {
     if (error) {
+      self.commandRouter.pushToastMessage(
+        "error",
+        "Error gettting stream url",
+        error
+      );
       return console.error('Error gettting stream url', error);
     }
-    streamUrl = stream;
-    // sending command to stop current playing song.
-    self.mpdPlugin.sendMpdCommand('stop', [])
+    self.playStreamUrl(stream)
       .then(function () {
-        return self.mpdPlugin.sendMpdCommand('clear', []);
+        defer.resolve();
       })
-      .then(function (values) {
-        return self.mpdPlugin.sendMpdCommand('load "' + streamUrl + '"', []);
-      })
-      .fail(function (data) {
-        return self.mpdPlugin.sendMpdCommand('add "' + streamUrl + '"', []);
-      })
-      .then(function () {
-        self.mpdPlugin.clientMpd.on('system', function (status) {
-          var timeStart = Date.now();
-          self.logger.info('Google Play Music: ' + status);
-          self.mpdPlugin.getState().then(function (state) {
-            state.trackType = "Google Play Music";
-            return self.commandRouter.stateMachine.syncState(state, "googleplaymusic");
-          });
-        });
-        return self.mpdPlugin.sendMpdCommand('play', []).then(function () {
-          self.commandRouter.pushConsoleMessage("googleplaymusic::After Play");
-          return self.mpdPlugin.getState().then(function (state) {
-            state.trackType = "Google Play Music";
-            self.commandRouter.pushConsoleMessage("googleplaymusic: " + JSON.stringify(state));
-            return self.commandRouter.stateMachine.syncState(state, "googleplaymusic");
-          });
-        });
-      })
-      .fail(function (e) {
-        return defer.reject(new Error());
+      .fail(function (error) {
+        console.error('Failed to Play song from Stream url ' + stream, error);
+        defer.reject(error);
       });
   });
+  return defer.promise;
 };
 
-googleplaymusic.prototype.seek = function (timepos) {
-  var consoleMessage = "googleplaymusic::seek to " + timepos;
-  this.pushConsoleMessage(consoleMessage);
-  return this.mpdPlugin.seek(timepos);
-};
-
-googleplaymusic.prototype.next = function () {
-  this.pushConsoleMessage('googleplaymusic::next');
+googleplaymusic.prototype.playStreamUrl = function (streamUrl) {
   var self = this;
-  return self.mpdPlugin.sendMpdCommand('next', []).then(function () {
-    return self.mpdPlugin.getState().then(function (state) {
-      state.trackType = "googleplaymusic Track";
-      return self.commandRouter.stateMachine.syncState(state, "googleplaymusic");
+  return self.mpdPlugin.sendMpdCommand('stop', []) // sending command to stop current playing song.
+    .then(function () {
+      return self.mpdPlugin.sendMpdCommand('clear', []);
+    })
+    .then(function (values) {
+      return self.mpdPlugin.sendMpdCommand('load "' + streamUrl + '"', []);
+    })
+    .fail(function (data) {
+      return self.mpdPlugin.sendMpdCommand('add "' + streamUrl + '"', []);
+    })
+    .then(function () {
+      self.mpdPlugin.clientMpd.on('system', function (status) {
+        self.logger.info('Google Play Music: ' + status);
+        self.mpdPlugin.getState().then(function (state) {
+          state.trackType = "Google Play Music";
+          return self.commandRouter.stateMachine.syncState(state, "googleplaymusic");
+        });
+      });
+      return self.mpdPlugin.sendMpdCommand('play', []).then(function () {
+        self.commandRouter.pushConsoleMessage("googleplaymusic::After Play");
+        return self.mpdPlugin.getState().then(function (state) {
+          state.trackType = "Google Play Music";
+          self.commandRouter.pushConsoleMessage("googleplaymusic: " + JSON.stringify(state));
+          return self.commandRouter.stateMachine.syncState(state, "googleplaymusic");
+        });
+      });
     });
-  });
-};
-
-googleplaymusic.prototype.previous = function () {
-  this.pushConsoleMessage('googleplaymusic::previous');
-  var self = this;
-  return self.mpdPlugin.sendMpdCommand('previous', []).then(function () {
-    return self.mpdPlugin.getState().then(function (state) {
-      state.trackType = "googleplaymusic Track";
-      return self.commandRouter.stateMachine.syncState(state, "googleplaymusic");
-    });
-  });
 };
 
 
-// Stop
-googleplaymusic.prototype.stop = function () {
-  this.pushConsoleMessage("googleplaymusic::stop");
-};
+googleplaymusic.prototype.seek = playActions.seek;
 
-// Google play music pause
-googleplaymusic.prototype.pause = function () {
-  this.pushConsoleMessage("googleplaymusic::pause");
-};
+googleplaymusic.prototype.next = playActions.next;
 
-// Get state
-googleplaymusic.prototype.getState = function () {
-  this.pushConsoleMessage("googleplaymusic::getState");
-};
+googleplaymusic.prototype.previous = playActions.previous;
 
-//Parse state
-googleplaymusic.prototype.parseState = function (sState) {
-  this.pushConsoleMessage("googleplaymusic::parseState");
-  //Use this method to parse the state and eventually send it with the following function
-};
+googleplaymusic.prototype.stop = playActions.stop;
 
-// Announce updated State
+googleplaymusic.prototype.pause = playActions.pause;
+
+googleplaymusic.prototype.resume = playActions.resume;
+
+googleplaymusic.prototype.getState = playActions.getState;
+
+googleplaymusic.prototype.parseState = playActions.parseState;
+
+
 googleplaymusic.prototype.pushState = function (state) {
   this.pushConsoleMessage("googleplaymusic::pushState");
   return this.commandRouter.servicePushState(state, this.servicename);
@@ -281,28 +255,43 @@ googleplaymusic.prototype.pushConsoleMessage = function (message) {
   this.commandRouter.pushConsoleMessage("[" + Date.now() + "] " + message);
 };
 
-// TODO: move to utility
-googleplaymusic.prototype.getAlbumArt = musicUtility.getAlbumUrl;
+googleplaymusic.prototype.getAlbumArt = function (data, path) {
+  var artist, album;
+  if (data != undefined && data.path != undefined) {
+    path = data.path;
+  }
+  var web;
+  if (data != undefined && data.artist != undefined) {
+    artist = data.artist;
+    album = (data.album != undefined) ? data.album : data.artist;
+    web = "?web=" +
+      nodetools.urlEncode(artist) +
+      "/" +
+      nodetools.urlEncode(album) +
+      "/large";
+  }
+  return getStructuredAlbumUrl(web, path);
+}
 
-googleplaymusic.prototype.search = function (query) {
-  var self = this;
-  var defer = libQ.defer();
-  playMusicCore.searchQuery(self, query.value).then(function (categoryData) {
-    defer.resolve(categoryData);
-  }).fail(function (error) {
-    console.error('Error getting song based on search query from Google Play Music Server.', error);
-    defer.reject(error);
-  });
-  return defer.promise;
-};
+function getStructuredAlbumUrl(web, path) {
+  var url = "/albumart";
+  if (web != undefined) url = url + web;
+  if (web != undefined && path != undefined) url = url + "&";
+  else if (path != undefined) url = url + "?";
+  if (path != undefined) url = url + "path=" + nodetools.urlEncode(path);
+  return url;
+}
 
-googleplaymusic.prototype._searchArtists = function (results) { };
 
-googleplaymusic.prototype._searchAlbums = function (results) { };
+googleplaymusic.prototype.search = playMusicSearch.search;
 
-googleplaymusic.prototype._searchPlaylists = function (results) { };
+// googleplaymusic.prototype._searchArtists = function (results) { };
 
-googleplaymusic.prototype._searchTracks = function (results) { };
+// googleplaymusic.prototype._searchAlbums = function (results) { };
+
+// googleplaymusic.prototype._searchPlaylists = function (results) { };
+
+// googleplaymusic.prototype._searchTracks = function (results) { };
 
 googleplaymusic.prototype.goto = function (data) {
   var self = this;

@@ -42,7 +42,7 @@ module.exports = {
     albumart: '/albumart?sourceicon=music_service/googleplaymusic/playMusic.svg'
   },
 
-  trackObjectStructure: {
+  volumioExpectedObjectStructure: {
     navigation: {
       prev: {
         uri: ''
