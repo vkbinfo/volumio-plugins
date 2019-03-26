@@ -81,11 +81,7 @@ googleplaymusic.prototype.saveGoogleAccount = function (data) {
   var password = data.password;
   var bitrate = data.bitrate;
   console.log("Google logging in...");
-
-  self.playMusic.login({ email: email, password: password }, function (
-    err,
-    authTokenData
-  ) {
+  self.playMusic.login({ email: email, password: password }, function (err, authTokenData) {
     if (err) {
       console.error("Google login failed", err);
       defer.reject({});
@@ -189,14 +185,6 @@ googleplaymusic.prototype.handleBrowseUri = function (curUri) {
     listItemsToRender = self.renderAlbumTracks(curUri);
   } else if (curUri.startsWith("googleplaymusic:artist:")) {
     listItemsToRender = self.getArtistData(curUri);
-  } else if (curUri.startsWith("googleplaymusic:user:")) {
-    listItemsToRender = self.listWebPlaylist(curUri);
-  } else if (curUri.startsWith("googleplaymusic/new")) {
-    listItemsToRender = self.listWebNew(curUri);
-  } else if (curUri.startsWith("googleplaymusic/categories")) {
-    listItemsToRender = self.listWebCategories(curUri);
-  } else if (curUri.startsWith("googleplaymusic/category")) {
-    listItemsToRender = self.listWebCategory(curUri);
   }
   return listItemsToRender;
 };
@@ -298,87 +286,49 @@ googleplaymusic.prototype.clearAddPlayTrack = function (track) {
 };
 
 googleplaymusic.prototype.seek = function (timepos) {
-  this.commandRouter.pushConsoleMessage(
-    "[" + Date.now() + "] " + "googleplaymusic::seek to " + timepos
-  );
-
+  var consoleMessage = "googleplaymusic::seek to " + timepos;
+  this.pushConsoleMessage(consoleMessage);
   // return this.sendSpopCommand("seek " + timepos, []);
 };
 
 // Stop
 googleplaymusic.prototype.stop = function () {
-  var self = this;
-  self.commandRouter.pushConsoleMessage(
-    "[" + Date.now() + "] " + "googleplaymusic::stop"
-  );
+  this.pushConsoleMessage("googleplaymusic::stop");
 };
 
-// Spop pause
+// Google play music pause
 googleplaymusic.prototype.pause = function () {
-  var self = this;
-  self.commandRouter.pushConsoleMessage(
-    "[" + Date.now() + "] " + "googleplaymusic::pause"
-  );
+  this.pushConsoleMessage("googleplaymusic::pause");
 };
 
 // Get state
 googleplaymusic.prototype.getState = function () {
-  var self = this;
-  self.commandRouter.pushConsoleMessage(
-    "[" + Date.now() + "] " + "googleplaymusic::getState"
-  );
+  this.pushConsoleMessage("googleplaymusic::getState");
 };
 
 //Parse state
 googleplaymusic.prototype.parseState = function (sState) {
-  var self = this;
-  self.commandRouter.pushConsoleMessage(
-    "[" + Date.now() + "] " + "googleplaymusic::parseState"
-  );
-
+  this.pushConsoleMessage("googleplaymusic::parseState");
   //Use this method to parse the state and eventually send it with the following function
 };
 
 // Announce updated State
 googleplaymusic.prototype.pushState = function (state) {
-  var self = this;
-  self.commandRouter.pushConsoleMessage(
-    "[" + Date.now() + "] " + "googleplaymusic::pushState"
-  );
+  this.pushConsoleMessage("googleplaymusic::pushState");
+  return this.commandRouter.servicePushState(state, this.servicename);
+};
 
-  return self.commandRouter.servicePushState(state, self.servicename);
+googleplaymusic.prototype.pushConsoleMessage = function (message) {
+  this.commandRouter.pushConsoleMessage("[" + Date.now() + "] " + message);
 };
 
 googleplaymusic.prototype.explodeUri = function (uri) {
-  console.log('To be explode uri', uri);
   var self = this;
   var defer = libQ.defer();
   var response = [];
   var trackData;
-  // Mandatory: retrieve all info for a given URI
   if (uri.includes('playlist')) {
-    self.logger.info("googleplaymusic::explodeUri Playlist: " + uri);
-    if (uri.includes('shared')) {
-      var sharedPlaylistId = uri.split(':').pop();
-      response = self.addPlaylistToQueue(sharedPlaylistId, { shared: true })
-        .then(function (tracks) {
-          defer.resolve(tracks);
-        })
-        .fail(function (error) {
-          defer.reject(error);
-        });
-      return defer.promise;
-    } else {
-      var playlistId = uri.split('/').pop();
-      response = self.addPlaylistToQueue(playlistId, { shared: false })
-        .then(function (tracks) {
-          defer.resolve(tracks);
-        })
-        .fail(function (error) {
-          defer.reject(error);
-        });
-      return defer.promise;
-    }
+    return self.handlePlaylistUri(uri);
   } else if (uri.includes('station')) {
     if (uri.includes('googleplaymusic:station:track')) {
       trackData = self.getTrackInfo(uri);
@@ -400,6 +350,32 @@ googleplaymusic.prototype.explodeUri = function (uri) {
   return defer.promise;
 };
 
+googleplaymusic.prototype.handlePlaylistUri = function (uri) {
+  var self = this;
+  var response = [];
+  var defer = libQ.defer();
+  self.logger.info("googleplaymusic::explodeUri Playlist: " + uri);
+  if (uri.includes('shared')) {
+    var sharedPlaylistId = uri.split(':').pop();
+    response = self.addPlaylistToQueue(sharedPlaylistId, { shared: true })
+      .then(function (tracks) {
+        defer.resolve(tracks);
+      })
+      .fail(function (error) {
+        defer.reject(error);
+      });
+  } else {
+    var playlistId = uri.split('/').pop();
+    response = self.addPlaylistToQueue(playlistId, { shared: false })
+      .then(function (tracks) {
+        defer.resolve(tracks);
+      })
+      .fail(function (error) {
+        defer.reject(error);
+      });
+  }
+  return defer.promise;
+};
 
 googleplaymusic.prototype.addPlaylistToQueue = playMusicCore.addPlaylistToQueue;
 

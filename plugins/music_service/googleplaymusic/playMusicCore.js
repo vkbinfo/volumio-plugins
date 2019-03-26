@@ -103,55 +103,6 @@ function getSongsInPlaylist(curUri, info) {
     } else {
       var tracks = responseData.entries[0].playlistEntry;
       var sharedPlaylistSongs = tracks.reduce(function (acc, track) {
-        /**
-         * {
- "kind": "sj#playlistEntry",
- "id": "AMaBXynWDffCvaCF27hRWoPE1-9PPm0pw2PfhTl9pkFRzqaN0LOScEQvKSSDJ60UmAHGTMY8p_I_Oa7mdWCDvuT1YO97yxwChw==",
- "absolutePosition": "02161727821137838077",
- "trackId": "T6akq2kkkgvvwbxcg224ifsp3uu",
- "creationTimestamp": "1527223719365394",
- "lastModifiedTimestamp": "1527223719365394",
- "deleted": false,
- "source": "2",
- "track": {
- "kind": "sj#track",
- "title": "Bittersweet (Original Mix)",
- "artist": "baaskaT",
- "composer": "",
- "album": "Flickshots & Quickscopes",
- "albumArtist": "baaskaT",
- "year": 2016,
- "trackNumber": 1,
- "durationMillis": "86000",
- "albumArtRef": [
- {
- "url": "http://lh3.googleusercontent.com/R1Dk0U-1U3V9PshW3He_E75ZKE-nkCHJLFIEVIb_kvZRQLcBdCNStwzocFMslQ2JCyNw2FIxww"
- }
- ],
- "artistArtRef": [
- {
- "url": "http://lh3.googleusercontent.com/J-QG-wJ_ndC-uS7amxJnoIjI5iDHgAyL4NxbX4tE7S6O8OBIbqtehbwOGsyqcAMC12wqmh-2"
- },
- {
- "url": "http://lh3.googleusercontent.com/R1Dk0U-1U3V9PshW3He_E75ZKE-nkCHJLFIEVIb_kvZRQLcBdCNStwzocFMslQ2JCyNw2FIxww"
- }
- ],
- "discNumber": 1,
- "estimatedSize": "3442975",
- "trackType": "7",
- "storeId": "T6akq2kkkgvvwbxcg224ifsp3uu",
- "albumId": "Bu7fytmr3nraowhbdqtjhqgjxmm",
- "artistId": [
- "Amwvyjcblitxufznqpiccuaz5zy"
- ],
- "nid": "6akq2kkkgvvwbxcg224ifsp3uu",
- "trackAvailableForSubscription": true,
- "trackAvailableForPurchase": true,
- "albumAvailableForPurchase": false,
- "contentType": "2"
- }
- },
-         */
         var trackData = track.track;
         acc.push({
           service: 'googleplaymusic', // plugin name
@@ -468,25 +419,6 @@ function getAlbumsFromList(entityArray, info) {
   } else {
     list = entityArray.reduce(function (acc, album) {
       acc.push(getFormatedAlbumInfo(album));
-      // {
-      //   "kind": "sj#album",
-      //   "name": "7",
-      //   "albumArtist": "Beach House",
-      //   "albumArtRef": "http://lh3.googleusercontent.com/lTFT1RfhSsC2RG_wJoPKhs2AdRBHyfryVLAwAIFRysxnkM4vOj93-23deMFI_QfpMAL6AEs-",
-      //   "albumId": "B7ae2tkhu6f6qddwjl3f3ms2u3y",
-      //   "artist": "Beach House",
-      //   "artistId": [
-      //   "Ajsyy36ejz77nwll5vpgey4m5ca"
-      //   ],
-      //   "description_attribution": {
-      //   "kind": "sj#attribution",
-      //   "source_title": "Wikipedia",
-      //   "source_url": "https://en.wikipedia.org/wiki/7_(Beach_House_album)",
-      //   "license_title": "Creative Commons Attribution CC-BY-SA 4.0",
-      //   "license_url": "http://creativecommons.org/licenses/by-sa/4.0/legalcode"
-      //   },
-      //   "year": 2018
-      //   },
       return acc;
     }, []);
   }
@@ -538,22 +470,6 @@ function getTracksFromList(googlePlayMusic, entityArray, info) {
       return acc;
     }, []);
   }
-  // for (var i in entityArray) {
-  //   var entity = entityArray[i];
-  //   if (entity.type === '1') {// for track type string is 1.
-  //     googlePlayMusic.tracks.push(entity.track);
-  //     list.push({
-  //       service: 'googleplaymusic',
-  //       type: 'song',
-  //       title: entity.track.title,
-  //       artist: entity.track.artist,
-  //       album: entity.track.album,
-  //       albumart: entity.track.albumArtRef[0].url,
-  //       uri: 'googleplaymusic:search:track:' + entity.track.storeId
-  //     });
-  //   }
-  // }
-  // googlePlayMusic.tracks = googlePlayMusic.tracks.concat(list);
   return list;
 }
 
@@ -571,65 +487,33 @@ function getFormatedTrackInfo(track) {
 
 function retrieveArtistData(service, artistId) {
   var defer = libQ.defer();
-  service.playMusic.getArtist(artistId, true, 20, 5, function (error, response) { // second argument about returning albums of artist,the third parameter is for returned top songs for artist
-    if (error) {
-      defer.reject(error);
-    } else {
-      console.log('response for artist api', JSON.stringify(response, undefined, 4));
-      var volumioFormated = {
-        "navigation": {
-          "isSearchResult": true,
-          "lists": []
-        }
-      };
-      var artistCollection = volumioFormated.navigation.lists;
-      var artistList = getArtistsFromList(response.related_artists, { isArtistList: true });
-      var albumsList = getAlbumsFromList(response.albums, { isAlbumList: true });
-      var topTrackList = getTracksFromList(service, response.topTracks, { isTrackArray: true });
-      artistCollection.push({ type: 'title', title: 'Artist Tracks', availableListViews: ["list"], items: topTrackList });
-      artistCollection.push({ type: 'title', title: 'Related Artists', availableListViews: ["list", "grid"], items: artistList });
-      artistCollection.push({ type: 'title', title: 'Artist Albums', availableListViews: ["list", "grid"], items: albumsList });
-      defer.resolve(volumioFormated);
-    }
-  });
+  service.playMusic.getArtist(artistId,
+    true, /**boolean value for album return */
+    20, /**total tracks that will be returned in this api*/
+    5, /*total related artist that will be returned */
+    function (error, response) {
+      if (error) {
+        defer.reject(error);
+      } else {
+        console.log('response for artist api', JSON.stringify(response, undefined, 4));
+        var volumioFormated = {
+          "navigation": {
+            "isSearchResult": true,
+            "lists": []
+          }
+        };
+        var artistCollection = volumioFormated.navigation.lists;
+        var artistList = getArtistsFromList(response.related_artists, { isArtistList: true });
+        var albumsList = getAlbumsFromList(response.albums, { isAlbumList: true });
+        var topTrackList = getTracksFromList(service, response.topTracks, { isTrackArray: true });
+        artistCollection.push({ type: 'title', title: 'Artist Tracks', availableListViews: ["list"], items: topTrackList });
+        artistCollection.push({ type: 'title', title: 'Related Artists', availableListViews: ["list", "grid"], items: artistList });
+        artistCollection.push({ type: 'title', title: 'Artist Albums', availableListViews: ["list", "grid"], items: albumsList });
+        defer.resolve(volumioFormated);
+      }
+    });
   return defer.promise;
 }
-// TODO: Remove follow commented code in refactor, if it is not been used yet.
-// function getSongsByStationId(stationId) {
-//   var self = this;
-//   var defer = libQ.defer();
-//   var stationTracks = [];
-//   console.log('stationId', stationId);
-//   this.playMusic.getStationTracks(stationId, 25, function (error, apiResponse) {
-//     if (error) {
-//       console.error('Error getting station tracks: ', error);
-//       defer.reject(error);
-//       return defer.promise;
-//     }
-//     var stationTracksArray = apiResponse.data.stations[0].tracks;
-//     for (var i in stationTracksArray) {
-//       var track = stationTracksArray[i];
-//       stationTracks.push({
-//         service: 'googleplaymusic', // plugin name
-//         uri: 'googleplaymusic:station:track:' + track.nid,
-//         type: 'song',
-//         trackId: track.nid, // nid works same as trackId, when we will try to get the streamurl from google.(for station songs array, google doesn't return trackId, but it does for playlist songs)
-//         name: track.title,
-//         title: track.title,
-//         artist: track.artist,
-//         album: track.album,
-//         albumArtRef: track.albumArtRef,
-//         albumart: track.albumArtRef[0].url,
-//         samplerate: self.samplerate,
-//         duration: Math.trunc(track.durationMillis / 1000),
-//         bitdepth: '16 bit',
-//         trackType: 'googleplaymusic',
-//       });
-//     }
-//     defer.resolve(stationTracks);
-//   });
-//   return defer.promise;
-// }
 
 function getTrackInfo(uri) {
   var self = this;
