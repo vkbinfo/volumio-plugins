@@ -6,6 +6,32 @@ var libQ = require("kew");
 
 var PLAY_MUSIC_CONSTANTS = require('./playMusicConstants');
 
+function saveGoogleAccount(data) {
+  var self = this;
+  var defer = libQ.defer();
+  var email = data.email;
+  var password = data.password;
+  var bitrate = data.bitrate;
+  console.log("Google logging in...");
+  self.playMusic.login({ email: email, password: password }, function (err, authTokenData) {
+    if (err) {
+      console.error("Google login failed", err);
+      defer.reject({});
+      return defer.promise;
+    }
+    self.commandRouter.pushToastMessage(
+      "success",
+      "Configuration update",
+      "You have successfully signed in the google account."
+    );
+    self.config.set("email", email);
+    self.config.set("bitrate", bitrate);
+    self.config.set("masterToken", authTokenData.masterToken);
+    self.config.set("androidId", authTokenData.androidId);
+  });
+  return defer.promise;
+}
+
 function getPlaylists(service) {
   var self = this;
   var defer = libQ.defer();
@@ -535,6 +561,7 @@ function getTrackInfo(uri) {
 }
 
 module.exports = {
+  saveGoogleAccount: saveGoogleAccount,
   getPlaylists: getPlaylists,
   getSongsInPlaylist: getSongsInPlaylist,
   addPlaylistToQueue: addPlaylistToQueue,

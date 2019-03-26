@@ -8,6 +8,8 @@ var PLAY_MUSIC = require("playmusic");
 
 var PLAY_MUSIC_CONSTANTS = require('./playMusicConstants');
 var playMusicCore = require('./playMusicCore');
+var uriHandler = require('./uriHandler');
+var musicUtility = require('./musicUtility');
 
 module.exports = googleplaymusic;
 function googleplaymusic(context) {
@@ -62,10 +64,8 @@ googleplaymusic.prototype.onStart = function () {
 googleplaymusic.prototype.onStop = function () {
   var self = this;
   var defer = libQ.defer();
-
   // Once the Plugin has successfull stopped resolve the promise
   defer.resolve();
-
   return libQ.resolve();
 };
 
@@ -74,40 +74,12 @@ googleplaymusic.prototype.onRestart = function () {
   // Optional, use if you need it
 };
 
-googleplaymusic.prototype.saveGoogleAccount = function (data) {
-  var self = this;
-  var defer = libQ.defer();
-  var email = data.email;
-  var password = data.password;
-  var bitrate = data.bitrate;
-  console.log("Google logging in...");
-  self.playMusic.login({ email: email, password: password }, function (err, authTokenData) {
-    if (err) {
-      console.error("Google login failed", err);
-      defer.reject({});
-      return defer.promise;
-    }
-    self.commandRouter.pushToastMessage(
-      "success",
-      "Configuration update",
-      "You have successfully signed in the google account."
-    );
-    self.config.set("email", email);
-    self.config.set("bitrate", bitrate);
-    self.config.set("masterToken", authTokenData.masterToken);
-    self.config.set("androidId", authTokenData.androidId);
-  });
-  return defer.promise;
-};
-
 // Configuration Methods -----------------------------------------------------------------------------
 
 googleplaymusic.prototype.getUIConfig = function () {
   var defer = libQ.defer();
   var self = this;
-
   var lang_code = self.commandRouter.sharedVars.get("language_code");
-
   self.commandRouter
     .i18nJson(
       __dirname + "/i18n/strings_" + lang_code + ".json",
@@ -120,7 +92,6 @@ googleplaymusic.prototype.getUIConfig = function () {
     .fail(function () {
       defer.reject(new Error());
     });
-
   return defer.promise;
 };
 
@@ -144,7 +115,6 @@ googleplaymusic.prototype.setConf = function (varName, varValue) {
 };
 
 // Playback Controls ---------------------------------------------------------------------------------------
-// If your plugin is not a music_sevice don't use this part and delete it
 
 googleplaymusic.prototype.addToBrowseSources = function () {
   var self = this;
@@ -152,35 +122,9 @@ googleplaymusic.prototype.addToBrowseSources = function () {
   self.commandRouter.volumioAddToBrowseSources(data);
 };
 
-googleplaymusic.prototype.handleBrowseUri = function (curUri) {
-  var self = this;
-  var listItemsToRender;
-  if (curUri == "googleplaymusic") {
-    listItemsToRender = libQ.resolve(PLAY_MUSIC_CONSTANTS.availableFeatures); // get's first time options, when we click on the google play music in the browse section.
-  } else if (curUri.startsWith("googleplaymusic/playlists")) {
-    if (curUri == "googleplaymusic/playlists") {
-      listItemsToRender = self.getPlaylists(self);
-    } else {
-      listItemsToRender = self.getSongsInPlaylist(curUri, { shared: false });
-    }
-  } else if (curUri.includes('googleplaymusic:shared:playlist:')) {
-    listItemsToRender = self.getSongsInPlaylist(curUri, { shared: true });
-  } else if (curUri.startsWith("googleplaymusic/stations")) {
-    if (curUri == "googleplaymusic/stations") {
-      listItemsToRender = self.getStations();
-    } else {
-      listItemsToRender = self.getSongsInStation(curUri);
-    }
-  } else if (curUri.startsWith("googleplaymusic/featuredplaylists")) {
-    listItemsToRender = self.featuredPlaylists(curUri);
-  } else if (curUri.startsWith("googleplaymusic:album")) {
-    listItemsToRender = self.renderAlbumTracks(curUri);
-  } else if (curUri.startsWith("googleplaymusic:artist:")) {
-    listItemsToRender = self.getArtistData(curUri);
-  }
-  return listItemsToRender;
-};
+googleplaymusic.prototype.saveGoogleAccount = playMusicCore.saveGoogleAccount;
 
+googleplaymusic.prototype.handleBrowseUri = uriHandler.handleBrowseUri;
 
 googleplaymusic.prototype.getPlaylists = playMusicCore.getPlaylists;
 
@@ -189,6 +133,17 @@ googleplaymusic.prototype.getSongsInPlaylist = playMusicCore.getSongsInPlaylist;
 googleplaymusic.prototype.getStations = playMusicCore.getStations;
 
 googleplaymusic.prototype.getSongsInStation = playMusicCore.getSongsInStation;
+
+// Exploding uri for further music action like returning playlist songs to add into queue.
+googleplaymusic.prototype.explodeUri = uriHandler.explodeUri;
+
+googleplaymusic.prototype.addPlaylistToQueue = playMusicCore.addPlaylistToQueue;
+
+googleplaymusic.prototype.addStationSongsToQueue = playMusicCore.addStationSongsToQueue;
+
+googleplaymusic.prototype.getAlbumTracks = playMusicCore.getAlbumTracks;
+
+googleplaymusic.prototype.getTrackInfo = playMusicCore.getTrackInfo;
 
 googleplaymusic.prototype.renderAlbumTracks = function (curUri) {
   var self = this;
@@ -326,103 +281,8 @@ googleplaymusic.prototype.pushConsoleMessage = function (message) {
   this.commandRouter.pushConsoleMessage("[" + Date.now() + "] " + message);
 };
 
-googleplaymusic.prototype.explodeUri = function (uri) {
-  var self = this;
-  var defer = libQ.defer();
-  var returnPromiseObject;
-  if (uri.includes('playlist')) {
-    returnPromiseObject = self.handlePlaylistUri(uri);
-  } else if (uri.includes('station')) {
-    returnPromiseObject = self.handleStationUri(uri);
-  } else if (uri.startsWith('googleplaymusic:album:')) {
-    var albumId = uri.split(':').pop();
-    returnPromiseObject = self.getAlbumTracks(self, albumId);
-  } else {
-    var trackData = self.getTrackInfo(uri);
-    var response = [trackData];
-    defer.resolve(response);
-    returnPromiseObject = defer.promise;
-  }
-  return returnPromiseObject;
-};
-
-googleplaymusic.prototype.handlePlaylistUri = function (uri) {
-  var self = this;
-  var defer = libQ.defer();
-  self.logger.info("googleplaymusic::explodeUri Playlist: " + uri);
-  if (uri.includes('shared')) {
-    var sharedPlaylistId = uri.split(':').pop();
-    self.addPlaylistToQueue(sharedPlaylistId, { shared: true })
-      .then(function (tracks) {
-        defer.resolve(tracks);
-      })
-      .fail(function (error) {
-        defer.reject(error);
-      });
-  } else {
-    var playlistId = uri.split('/').pop();
-    self.addPlaylistToQueue(playlistId, { shared: false })
-      .then(function (tracks) {
-        defer.resolve(tracks);
-      })
-      .fail(function (error) {
-        defer.reject(error);
-      });
-  }
-  return defer.promise;
-};
-
-googleplaymusic.prototype.handleStationUri = function (uri) {
-  var self = this;
-  var trackData;
-  var defer = libQ.defer();
-  if (uri.includes('googleplaymusic:station:track')) {
-    trackData = self.getTrackInfo(uri);
-    var response = [trackData];
-    defer.resolve(response);
-    return defer.promise;
-  } else {
-    self.logger.info("googleplaymusic::explodeUri Station: " + uri);
-    var stationId = uri.split('/').pop();
-    return self.addStationSongsToQueue(stationId);
-  }
-};
-
-googleplaymusic.prototype.addPlaylistToQueue = playMusicCore.addPlaylistToQueue;
-
-googleplaymusic.prototype.addStationSongsToQueue = playMusicCore.addStationSongsToQueue;
-
-// googleplaymusic.prototype.getSongsByStationId = playMusicCore.getSongsByStationId;
-
-googleplaymusic.prototype.getAlbumTracks = playMusicCore.getAlbumTracks;
-googleplaymusic.prototype.getTrackInfo = playMusicCore.getTrackInfo;
-
-googleplaymusic.prototype.getAlbumArt = function (data, path) {
-  var artist, album;
-
-  if (data != undefined && data.path != undefined) {
-    path = data.path;
-  }
-
-  var web;
-  if (data != undefined && data.artist != undefined) {
-    artist = data.artist;
-    if (data.album != undefined) album = data.album;
-    else album = data.artist;
-    web = "?web=" +
-      nodetools.urlEncode(artist) +
-      "/" +
-      nodetools.urlEncode(album) +
-      "/large";
-  }
-
-  var url = "/albumart";
-  if (web != undefined) url = url + web;
-  if (web != undefined && path != undefined) url = url + "&";
-  else if (path != undefined) url = url + "?";
-  if (path != undefined) url = url + "path=" + nodetools.urlEncode(path);
-  return url;
-};
+// TODO: move to utility
+googleplaymusic.prototype.getAlbumArt = musicUtility.getAlbumUrl;
 
 googleplaymusic.prototype.search = function (query) {
   var self = this;
